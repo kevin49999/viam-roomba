@@ -7,6 +7,8 @@
 	import BaseCommands from './BaseCommands.svelte';
 	import BaseProvider from './BaseProvider.svelte';
 	import BatteryPercent from './BatteryPercent.svelte';
+	import Camera from './Camera.svelte';
+	import CameraProvider from './CameraProvider.svelte';
 	import OIMode from './OIMode.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
 
@@ -37,33 +39,43 @@
 <ViamProvider {dialConfigs}>
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
 		<BaseProvider partID={DEFAULT_PART_ID} name="base">
-			<div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-				<div class="flex flex-wrap items-center justify-between gap-4">
-					<div>
-						<h1 class="text-xl font-bold text-slate-900 dark:text-white">Roomba Dashboard</h1>
-						<p class="text-xs text-slate-500 font-mono mt-1">{host}</p>
-					</div>
-					<BatteryPercent />
-				</div>
+			<CameraProvider partID={DEFAULT_PART_ID} name="camera">
+				<div class="flex flex-col gap-6">
+					<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+						<div class="lg:col-span-2 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+							<div class="flex flex-wrap items-center justify-between gap-4">
+								<div>
+									<h1 class="text-xl font-bold text-slate-900 dark:text-white">Roomba Dashboard</h1>
+									<p class="text-xs text-slate-500 font-mono mt-1">{host}</p>
+								</div>
+								<BatteryPercent />
+							</div>
 
-				<div class="h-px bg-slate-100 dark:bg-slate-800"></div>
+							<div class="h-px bg-slate-100 dark:bg-slate-800"></div>
 
-				<div class="flex flex-wrap items-center gap-6">
-					<div class="flex flex-col gap-2">
-						<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
-						<OIMode />
+							<div class="flex flex-wrap items-center gap-6">
+								<div class="flex flex-col gap-2">
+									<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
+									<OIMode />
+								</div>
+								
+								<div class="flex flex-col gap-2">
+									<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
+									<BaseCommands />
+								</div>
+							</div>
+						</div>
+						
+						<div class="lg:col-span-1">
+							<Camera />
+						</div>
 					</div>
 					
-					<div class="flex flex-col gap-2">
-						<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
-						<BaseCommands />
+					<div>
+						<AllReadings />
 					</div>
 				</div>
-			</div>
-			
-			<div class="mt-6">
-				<AllReadings />
-			</div>
+			</CameraProvider>
 		</BaseProvider>
 	</ReadingsProvider>
 </ViamProvider>

@@ -149,7 +149,6 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 
 	// Packet 15: Dirt Detect
 	readings["dirt_detect"] = int(b(8))
-	readings["dirt_level"] = int(b(8))
 
 	// Packet 17, 52-53: IR Opcodes
 	readings["ir_opcode_omni"] = int(b(9))

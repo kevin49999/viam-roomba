@@ -436,6 +436,24 @@ func (s *viamRoombaBase) IsMoving(ctx context.Context) (bool, error) {
 	return isMoving, nil
 }
 
+// readAngle returns the angle in degrees since the last time it was requested.
+// Packet ID 20, 2-byte signed integer.
+func (s *viamRoombaBase) readAngle() (int16, error) {
+	s.conn.mu.Lock()
+	defer s.conn.mu.Unlock()
+
+	s.conn.flushRx()
+	data, err := s.conn.roomba.Sensors(20)
+	if err != nil {
+		return 0, err
+	}
+	if len(data) < 2 {
+		return 0, errors.New("unexpected sensor data length")
+	}
+
+	return int16(binary.BigEndian.Uint16(data)), nil
+}
+
 // Properties returns the width, turning radius, and wheel circumference of the physical base in meters.
 func (s *viamRoombaBase) Properties(ctx context.Context, extra map[string]any) (base.Properties, error) {
 	return base.Properties{

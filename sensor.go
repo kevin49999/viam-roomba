@@ -79,8 +79,6 @@ var sensorPackets = []byte{
 	15, // Dirt Detect
 	17, // IR Opcode Omnidirectional Receiver
 	18, // Buttons
-	19, // Distance (mm, signed)
-	20, // Angle (degrees, signed)
 	21, // Charging State
 	22, // Voltage (mV)
 	23, // Current (mA, signed)
@@ -152,8 +150,8 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 
 	// Packet 17, 52-53: IR Opcodes
 	readings["ir_opcode_omni"] = int(b(9))
-	readings["ir_opcode_left"] = int(b(28))
-	readings["ir_opcode_right"] = int(b(29))
+	readings["ir_opcode_left"] = int(b(26))
+	readings["ir_opcode_right"] = int(b(27))
 
 	// Packet 18: Buttons
 	buttons := b(10)
@@ -166,12 +164,8 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	readings["button_schedule"] = buttons&0x40 != 0
 	readings["button_clock"] = buttons&0x80 != 0
 
-	// Packets 19-20: Odometry (cumulative since last read)
-	readings["distance_mm"] = int(i16(11))
-	readings["angle_deg"] = int(i16(12))
-
 	// Packet 21: Charging State
-	chargingIdx := int(b(13))
+	chargingIdx := int(b(11))
 	if chargingIdx < len(chargingStates) {
 		readings["charging_state"] = chargingStates[chargingIdx]
 	} else {
@@ -179,11 +173,11 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	}
 
 	// Packets 22-26: Battery
-	readings["voltage_mv"] = int(u16(14))
-	readings["current_ma"] = int(i16(15))
-	readings["temperature_c"] = int(int8(b(16)))
-	charge := int(u16(17))
-	capacity := int(u16(18))
+	readings["voltage_mv"] = int(u16(12))
+	readings["current_ma"] = int(i16(13))
+	readings["temperature_c"] = int(int8(b(14)))
+	charge := int(u16(15))
+	capacity := int(u16(16))
 	readings["battery_charge_mah"] = charge
 	readings["battery_capacity_mah"] = capacity
 	if capacity > 0 {
@@ -191,19 +185,19 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	}
 
 	// Packets 27-31: Signal strengths
-	readings["wall_signal"] = int(u16(19))
-	readings["cliff_left_signal"] = int(u16(20))
-	readings["cliff_front_left_signal"] = int(u16(21))
-	readings["cliff_front_right_signal"] = int(u16(22))
-	readings["cliff_right_signal"] = int(u16(23))
+	readings["wall_signal"] = int(u16(17))
+	readings["cliff_left_signal"] = int(u16(18))
+	readings["cliff_front_left_signal"] = int(u16(19))
+	readings["cliff_front_right_signal"] = int(u16(20))
+	readings["cliff_right_signal"] = int(u16(21))
 
 	// Packet 34: Charging Sources Available
-	charger := b(24)
+	charger := b(22)
 	readings["charger_internal"] = charger&0x01 != 0
 	readings["charger_homebase"] = charger&0x02 != 0
 
 	// Packet 35: OI Mode
-	modeIdx := int(b(25))
+	modeIdx := int(b(23))
 	if modeIdx < len(oiModes) {
 		readings["oi_mode"] = oiModes[modeIdx]
 	} else {
@@ -211,11 +205,11 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	}
 
 	// Packets 39-40: Requested motion
-	readings["requested_velocity_mms"] = int(i16(26))
-	readings["requested_radius_mm"] = int(i16(27))
+	readings["requested_velocity_mms"] = int(i16(24))
+	readings["requested_radius_mm"] = int(i16(25))
 
 	// Packet 58: Stasis
-	readings["stasis"] = int(b(30))
+	readings["stasis"] = int(b(28))
 
 	return readings, nil
 }

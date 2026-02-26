@@ -7,10 +7,13 @@
 		throw new Error('BaseCommands must be used inside BaseProvider');
 	}
 
-	const { doCommandMutation, spinMutation } = baseContext;
+	const { doCommandMutation, spinMutation, moveStraightMutation } = baseContext;
 
 	let angleDeg = $state(90);
 	let degsPerSec = $state(45);
+
+	let distanceMm = $state(500);
+	let mmPerSec = $state(100);
 
 	function start() {
 		doCommandMutation.mutate([{ command: 'start' }]);
@@ -26,6 +29,10 @@
 
 	function spin() {
 		spinMutation.mutate([angleDeg, degsPerSec]);
+	}
+
+	function moveStraight() {
+		moveStraightMutation.mutate([distanceMm, mmPerSec]);
 	}
 </script>
 
@@ -99,6 +106,45 @@
 
 		{#if spinMutation.isError}
 			<p class="text-sm text-red-600 dark:text-red-400">{spinMutation.error?.message}</p>
+		{/if}
+	</div>
+
+	<div class="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+		<div class="flex flex-col gap-1">
+			<label for="distance-mm" class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+				Distance (mm)
+			</label>
+			<input
+				id="distance-mm"
+				type="number"
+				bind:value={distanceMm}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+			/>
+		</div>
+
+		<div class="flex flex-col gap-1">
+			<label for="mm-per-sec" class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+				Speed (mm/s)
+			</label>
+			<input
+				id="mm-per-sec"
+				type="number"
+				bind:value={mmPerSec}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+			/>
+		</div>
+
+		<button
+			type="button"
+			onclick={moveStraight}
+			disabled={moveStraightMutation.isPending}
+			class="rounded bg-slate-800 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+		>
+			Move Straight
+		</button>
+
+		{#if moveStraightMutation.isError}
+			<p class="text-sm text-red-600 dark:text-red-400">{moveStraightMutation.error?.message}</p>
 		{/if}
 	</div>
 </div>

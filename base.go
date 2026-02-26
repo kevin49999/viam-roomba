@@ -366,6 +366,26 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		}
 		return map[string]any{"status": "started"}, nil
 
+	case "move_straight":
+		distanceMm, ok := cmd["distance_mm"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("distance_mm must be a number")
+		}
+		mmPerSec, ok := cmd["mm_per_sec"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("mm_per_sec must be a number")
+		}
+		// MoveStraight is blocking, but DoCommand should usually be non-blocking or at least return after starting if possible.
+		// However, the MoveStraight method in this implementation IS blocking.
+		// If we want it to be non-blocking in DoCommand, we might want to run it in a goroutine.
+		// But for now, let's keep it consistent with the existing implementation.
+		go func() {
+			if err := s.MoveStraight(ctx, int(distanceMm), mmPerSec, nil); err != nil {
+				s.logger.Errorf("MoveStraight failed in DoCommand: %v", err)
+			}
+		}()
+		return map[string]any{"status": "move_straight_started"}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown command: %s", cmdName)
 	}

@@ -14,9 +14,11 @@
 
 	const baseClient = createResourceClient(BaseClient, () => partID, () => name);
 	const doCommandMutation = createResourceMutation(baseClient, 'doCommand');
+	const spinMutation = createResourceMutation(baseClient, 'spin');
 
 	const contextValue: BaseContextValue = {
-		doCommandMutation: doCommandMutation as unknown as BaseContextValue['doCommandMutation']
+		doCommandMutation: doCommandMutation as unknown as BaseContextValue['doCommandMutation'],
+		spinMutation: spinMutation as unknown as BaseContextValue['spinMutation']
 	};
 	setContext(BASE_CONTEXT_KEY, contextValue);
 </script>

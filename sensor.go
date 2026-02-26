@@ -80,7 +80,6 @@ var sensorPackets = []byte{
 	17, // IR Opcode Omnidirectional Receiver
 	18, // Buttons
 	19, // Distance (mm, signed)
-	20, // Angle (degrees, signed)
 	21, // Charging State
 	22, // Voltage (mV)
 	23, // Current (mA, signed)
@@ -167,7 +166,6 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 
 	// Packets 19-20: Odometry (cumulative since last read)
 	readings["distance_mm"] = int(i16(11))
-	readings["angle_deg"] = int(i16(12))
 
 	// Packet 21: Charging State
 	chargingIdx := int(b(13))

@@ -221,6 +221,13 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 	}
 
 	duration := math.Abs(angleDeg / degsPerSec)
+	i16 := func(data []byte) int16 { return int16(binary.BigEndian.Uint16(data)) }
+
+	startingAngle, err := s.conn.roomba.Sensors(20)
+	if err != nil {
+		return fmt.Errorf("failed to read starting degrees: %w", err)
+	}
+	s.logger.Debugf("Pre-rotation angle: %d", i16(startingAngle))
 
 	s.conn.mu.Lock()
 	if err := s.conn.roomba.Drive(velocity, radius); err != nil {
@@ -230,6 +237,12 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 	s.conn.mu.Unlock()
 
 	s.logger.Debugf("Spin: angle=%.2f deg, speed=%.2f deg/sec, velocity=%d mm/s, duration=%.2f sec", angleDeg, degsPerSec, velocity, duration)
+
+	endAngle, err := s.conn.roomba.Sensors(20)
+	if err != nil {
+		return fmt.Errorf("failed to read end angle: %w", err)
+	}
+	s.logger.Debugf("Post-rotation angle: %d", i16(endAngle))
 
 	sleepCtx, cancel := context.WithTimeout(ctx, time.Duration(duration*1000)*time.Millisecond)
 	defer cancel()

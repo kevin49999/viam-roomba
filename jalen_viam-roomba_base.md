@@ -79,3 +79,15 @@ Immediately stops all wheel movement.
 ```json
 { "command": "stop" }
 ```
+
+### `move_straight`
+
+Moves the Roomba straight a given distance at a given speed.
+
+```json
+{
+  "command": "move_straight",
+  "distance_mm": <number>,
+  "mm_per_sec": <number>
+}
+```

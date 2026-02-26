@@ -98,7 +98,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		if err := conn.roomba.Safe(); err != nil {
 			conn.mu.Unlock()
 			cancelFunc()
-			releaseConn(conf.SerialPort)
+			releaseConn(conf.SerialPort, logger)
 			return nil, fmt.Errorf("failed to enter Safe mode: %w", err)
 		}
 	}
@@ -199,23 +199,37 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 		return s.Stop(ctx, extra)
 	}
 
-	duration := math.Abs(angleDeg / degsPerSec)
-
-	var radius int16
-	if angleDeg > 0 {
-		radius = 1 // Spin in place CCW
-	} else {
-		radius = -1 // Spin in place CW
+	// Convert angular speed (deg/s) to wheel velocity (mm/s).
+	// For in-place spin: v = omega * (wheelbase / 2), omega in rad/s.
+	wheelbaseMM := float64(s.widthMM)
+	omegaRad := math.Abs(degsPerSec) * math.Pi / 180.0
+	velocity := int16(omegaRad * wheelbaseMM / 2.0)
+	if velocity > 500 {
+		velocity = 500
+	} else if velocity < 1 {
+		velocity = 1
 	}
 
+	// Positive angleDeg → CCW (radius 1), negative → CW (radius -1).
+	// Flip velocity sign for CW so the robot turns the right direction.
+	var radius int16
+	if angleDeg > 0 {
+		radius = 1
+	} else {
+		radius = -1
+		velocity = -velocity
+	}
+
+	duration := math.Abs(angleDeg / degsPerSec)
+
 	s.conn.mu.Lock()
-	if err := s.conn.roomba.Drive(100, radius); err != nil {
+	if err := s.conn.roomba.Drive(velocity, radius); err != nil {
 		s.conn.mu.Unlock()
 		return fmt.Errorf("failed to start spin: %w", err)
 	}
 	s.conn.mu.Unlock()
 
-	s.logger.Debugf("Spin: angle=%.2f deg, speed=%.2f deg/sec, duration=%.2f sec", angleDeg, degsPerSec, duration)
+	s.logger.Debugf("Spin: angle=%.2f deg, speed=%.2f deg/sec, velocity=%d mm/s, duration=%.2f sec", angleDeg, degsPerSec, velocity, duration)
 
 	sleepCtx, cancel := context.WithTimeout(ctx, time.Duration(duration*1000)*time.Millisecond)
 	defer cancel()
@@ -437,7 +451,7 @@ func (s *viamRoombaBase) Close(ctx context.Context) error {
 	s.conn.mu.Unlock()
 
 	s.cancelFunc()
-	releaseConn(s.serialPort)
+	releaseConn(s.serialPort, s.logger)
 
 	s.logger.Info("Roomba base closed")
 	return nil

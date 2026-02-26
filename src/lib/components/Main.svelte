@@ -4,6 +4,8 @@
 	import { ViamProvider } from '@viamrobotics/svelte-sdk';
 	import { getCookie } from 'typescript-cookie';
 	import AllReadings from './AllReadings.svelte';
+	import BaseCommands from './BaseCommands.svelte';
+	import BaseProvider from './BaseProvider.svelte';
 	import BatteryPercent from './BatteryPercent.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
 
@@ -33,12 +35,17 @@
 
 <ViamProvider {dialConfigs}>
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
-		<div>
-			<p><strong>Host:</strong> {host}</p>
-			<p class="mt-2 flex items-center gap-2">
-				<strong>Battery:</strong> <BatteryPercent />
-			</p>
-		</div>
-		<AllReadings />
+		<BaseProvider partID={DEFAULT_PART_ID} name="base">
+			<div>
+				<p><strong>Host:</strong> {host}</p>
+				<p class="mt-2 flex items-center gap-2">
+					<strong>Battery:</strong> <BatteryPercent />
+				</p>
+				<p class="mt-2 flex items-center gap-2">
+					<strong>Base:</strong> <BaseCommands />
+				</p>
+			</div>
+			<AllReadings />
+		</BaseProvider>
 	</ReadingsProvider>
 </ViamProvider>

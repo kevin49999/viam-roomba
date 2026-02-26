@@ -360,6 +360,11 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 			return nil, fmt.Errorf("failed to stop: %w", err)
 		}
 		return map[string]any{"status": "stopped"}, nil
+	case "start":
+		if err := s.conn.roomba.Start(); err != nil {
+			return nil, fmt.Errorf("failed to start: %w", err)
+		}
+		return map[string]any{"status": "started"}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown command: %s", cmdName)

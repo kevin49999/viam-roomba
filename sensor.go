@@ -221,6 +221,6 @@ func (s *viamRoombaSensor) DoCommand(ctx context.Context, cmd map[string]any) (m
 }
 
 func (s *viamRoombaSensor) Close(ctx context.Context) error {
-	releaseConn(s.serialPort)
+	releaseConn(s.serialPort, s.logger)
 	return nil
 }

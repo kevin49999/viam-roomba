@@ -98,7 +98,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		if err := conn.roomba.Safe(); err != nil {
 			conn.mu.Unlock()
 			cancelFunc()
-			releaseConn(conf.SerialPort)
+			releaseConn(conf.SerialPort, logger)
 			return nil, fmt.Errorf("failed to enter Safe mode: %w", err)
 		}
 	}
@@ -426,7 +426,7 @@ func (s *viamRoombaBase) Close(ctx context.Context) error {
 	s.conn.mu.Unlock()
 
 	s.cancelFunc()
-	releaseConn(s.serialPort)
+	releaseConn(s.serialPort, s.logger)
 
 	s.logger.Info("Roomba base closed")
 	return nil

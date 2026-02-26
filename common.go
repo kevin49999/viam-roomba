@@ -2,10 +2,12 @@ package viamroomba
 
 import (
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
 	"github.com/parabolala/go-roomba"
+	"go.viam.com/rdk/logging"
 )
 
 type roombaConn struct {
@@ -40,7 +42,7 @@ func acquireConn(serialPort string) (*roombaConn, error) {
 	return conn, nil
 }
 
-func releaseConn(serialPort string) {
+func releaseConn(serialPort string, logger logging.Logger) {
 	globalMu.Lock()
 	defer globalMu.Unlock()
 	conn, ok := connections[serialPort]
@@ -50,5 +52,14 @@ func releaseConn(serialPort string) {
 	conn.refs--
 	if conn.refs <= 0 {
 		delete(connections, serialPort)
+		if closer, ok := conn.roomba.S.(io.Closer); ok {
+			if err := closer.Close(); err != nil {
+				logger.Error("Closing serial connection errored:", err)
+				panic("error closing serial connection")
+			}
+		} else {
+			logger.Errorf("Serial connection was not a closer: %T", conn.roomba.S)
+			panic("Could not close serial connection")
+		}
 	}
 }

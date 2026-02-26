@@ -65,6 +65,14 @@
 
 <style>
 	.camera-container {
-		@apply overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-sm dark:border-slate-800;
+		overflow: hidden;
+		border-radius: 0.75rem;
+		border: 1px solid rgb(226 232 240);
+		background-color: rgb(2 6 23);
+		box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	}
+
+	:global(.dark) .camera-container {
+		border-color: rgb(30 41 59);
 	}
 </style>

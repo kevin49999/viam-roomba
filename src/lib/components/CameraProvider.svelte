@@ -10,8 +10,9 @@
 		refetchInterval?: number;
 		children?: import('svelte').Snippet;
 	}
+	const FPS_30 = 1000 / 30;
 
-	let { partID, name, refetchInterval = 100, children }: Props = $props();
+	let { partID, name, refetchInterval = FPS_30, children }: Props = $props();
 
 	const cameraClient = createResourceClient(CameraClient, () => partID, () => name);
 	const query = createResourceQuery(cameraClient, 'getImages', () => ({

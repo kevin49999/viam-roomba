@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { DEFAULT_PART_ID } from '$lib/consts';
 	import type { DialConf } from '@viamrobotics/sdk';
-	import { ViamProvider } from '@viamrobotics/svelte-sdk';
+	import { CameraStream, ViamProvider } from '@viamrobotics/svelte-sdk';
 	import { getCookie } from 'typescript-cookie';
 	import AllReadings from './AllReadings.svelte';
 	import BaseCommands from './BaseCommands.svelte';
@@ -39,7 +39,7 @@
 <ViamProvider {dialConfigs}>
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
 		<BaseProvider partID={DEFAULT_PART_ID} name="base">
-			<CameraProvider partID={DEFAULT_PART_ID} name="camera">
+			<CameraProvider partID={DEFAULT_PART_ID} name="camera-1">
 				<div class="flex flex-col gap-6">
 					<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 						<div class="lg:col-span-2 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
@@ -67,7 +67,8 @@
 						</div>
 						
 						<div class="lg:col-span-1">
-							<Camera />
+							<!-- TODO: replace with actual stream using robot stream -->
+							<Camera/>
 						</div>
 					</div>
 					

@@ -7,6 +7,7 @@
 	import BaseCommands from './BaseCommands.svelte';
 	import BaseProvider from './BaseProvider.svelte';
 	import BatteryPercent from './BatteryPercent.svelte';
+	import OIMode from './OIMode.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
 
 	let { host, credentials, machineId } = $props<{
@@ -36,16 +37,33 @@
 <ViamProvider {dialConfigs}>
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
 		<BaseProvider partID={DEFAULT_PART_ID} name="base">
-			<div>
-				<p><strong>Host:</strong> {host}</p>
-				<p class="mt-2 flex items-center gap-2">
-					<strong>Battery:</strong> <BatteryPercent />
-				</p>
-				<p class="mt-2 flex items-center gap-2">
-					<strong>Base:</strong> <BaseCommands />
-				</p>
+			<div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+				<div class="flex flex-wrap items-center justify-between gap-4">
+					<div>
+						<h1 class="text-xl font-bold text-slate-900 dark:text-white">Roomba Dashboard</h1>
+						<p class="text-xs text-slate-500 font-mono mt-1">{host}</p>
+					</div>
+					<BatteryPercent />
+				</div>
+
+				<div class="h-px bg-slate-100 dark:bg-slate-800"></div>
+
+				<div class="flex flex-wrap items-center gap-6">
+					<div class="flex flex-col gap-2">
+						<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
+						<OIMode />
+					</div>
+					
+					<div class="flex flex-col gap-2">
+						<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
+						<BaseCommands />
+					</div>
+				</div>
 			</div>
-			<AllReadings />
+			
+			<div class="mt-6">
+				<AllReadings />
+			</div>
 		</BaseProvider>
 	</ReadingsProvider>
 </ViamProvider>

@@ -45,6 +45,7 @@ A Viam sensor component for the iRobot Roomba 650/655 that exposes Roomba Open I
 | `overcurrent_right_wheel`  | bool    | Right wheel overcurrent                              |
 | `overcurrent_left_wheel`   | bool    | Left wheel overcurrent                               |
 | `dirt_detect`              | int     | Dirt detect sensor level (0–255)                     |
+| `dirt_level`               | int     | Dirt detect sensor level (0–255)                     |
 | `ir_opcode_omni`           | int     | IR opcode received from remote or dock               |
 | `ir_opcode_left`           | int     | IR opcode received from remote or dock               |
 | `ir_opcode_right`          | int     | IR opcode received from remote or dock               |
@@ -75,3 +76,4 @@ A Viam sensor component for the iRobot Roomba 650/655 that exposes Roomba Open I
 | `oi_mode`                  | string  | Current OI mode: `off`, `passive`, `safe`, or `full` |
 | `requested_velocity_mms`   | int     | Last commanded velocity (mm/s, signed)               |
 | `requested_radius_mm`      | int     | Last commanded radius (mm, signed)                   |
+| `stasis`                   | int     | Stasis byte (Bit 0: stuck, Bit 1: stationary)        |

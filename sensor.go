@@ -98,6 +98,7 @@ var sensorPackets = []byte{
 	40, // Requested Radius (mm, signed)
 	52, // IR Opcode Left Receiver
 	53, // IR Opcode Right Receiver
+	58, // Stasis
 }
 
 var chargingStates = []string{"not_charging", "reconditioning", "full_charging", "trickle_charging", "waiting", "charging_fault"}
@@ -148,6 +149,7 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 
 	// Packet 15: Dirt Detect
 	readings["dirt_detect"] = int(b(8))
+	readings["dirt_level"] = int(b(8))
 
 	// Packet 17, 52-53: IR Opcodes
 	readings["ir_opcode_omni"] = int(b(9))
@@ -196,12 +198,12 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	readings["cliff_front_right_signal"] = int(u16(22))
 	readings["cliff_right_signal"] = int(u16(23))
 
-	// Packet 33: Charging Sources Available
+	// Packet 34: Charging Sources Available
 	charger := b(24)
 	readings["charger_internal"] = charger&0x01 != 0
 	readings["charger_homebase"] = charger&0x02 != 0
 
-	// Packet 34: OI Mode
+	// Packet 35: OI Mode
 	modeIdx := int(b(25))
 	if modeIdx < len(oiModes) {
 		readings["oi_mode"] = oiModes[modeIdx]
@@ -212,6 +214,9 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	// Packets 39-40: Requested motion
 	readings["requested_velocity_mms"] = int(i16(26))
 	readings["requested_radius_mm"] = int(i16(27))
+
+	// Packet 58: Stasis
+	readings["stasis"] = int(b(30))
 
 	return readings, nil
 }

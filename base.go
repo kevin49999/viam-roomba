@@ -163,6 +163,10 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 	}
 
 	s.conn.mu.Lock()
+	if err := s.conn.roomba.Full(); err != nil {
+		s.conn.mu.Unlock()
+		return fmt.Errorf("failed to enter Full mode: %w", err)
+	}
 	if err := s.conn.roomba.Drive(velocity, 32767); err != nil {
 		s.conn.mu.Unlock()
 		return fmt.Errorf("failed to start straight movement: %w", err)
@@ -223,6 +227,10 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 	duration := math.Abs(angleDeg / degsPerSec)
 
 	s.conn.mu.Lock()
+	if err := s.conn.roomba.Full(); err != nil {
+		s.conn.mu.Unlock()
+		return fmt.Errorf("failed to enter Full mode: %w", err)
+	}
 	if err := s.conn.roomba.Drive(velocity, radius); err != nil {
 		s.conn.mu.Unlock()
 		return fmt.Errorf("failed to start spin: %w", err)
@@ -304,6 +312,9 @@ func (s *viamRoombaBase) SetVelocity(ctx context.Context, linear r3.Vector, angu
 		}
 	}
 
+	if err := s.conn.roomba.Full(); err != nil {
+		return fmt.Errorf("failed to enter Full mode: %w", err)
+	}
 	if err := s.conn.roomba.Drive(velocity, radius); err != nil {
 		return fmt.Errorf("failed to drive Roomba: %w", err)
 	}

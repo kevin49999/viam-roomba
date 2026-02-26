@@ -1,5 +1,5 @@
 import type { CreateMutationResult } from '@tanstack/svelte-query';
-import type { JsonValue } from '@viamrobotics/sdk';
+import type { JsonValue, Vector3 } from '@viamrobotics/sdk';
 
 /**
  * Command payload for doCommand. The base (e.g. Roomba) expects a "command" key
@@ -14,6 +14,8 @@ export interface BaseContextValue {
 	spinMutation: CreateMutationResult<void, Error, [angleDeg: number, degsPerSec: number], unknown>;
 	/** Mutation to send moveStraight to the base. Call with [distanceMm, mmPerSec] or [distanceMm, mmPerSec, extra, callOptions] */
 	moveStraightMutation: CreateMutationResult<void, Error, [distanceMm: number, mmPerSec: number], unknown>;
+	/** Mutation to send setVelocity to the base. Call with [linear, angular] or [linear, angular, extra, callOptions] */
+	setVelocityMutation: CreateMutationResult<void, Error, [linear: Vector3, angular: Vector3], unknown>;
 }
 
 export const BASE_CONTEXT_KEY = Symbol('base');

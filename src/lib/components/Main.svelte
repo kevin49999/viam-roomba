@@ -9,6 +9,7 @@
 	import BatteryPercent from './BatteryPercent.svelte';
 	import Camera from './Camera.svelte';
 	import CameraProvider from './CameraProvider.svelte';
+	import Joystick from './Joystick.svelte';
 	import OIMode from './OIMode.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
 
@@ -62,6 +63,10 @@
 								<div class="flex flex-col gap-2">
 									<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
 									<BaseCommands />
+								</div>
+
+								<div class="flex flex-col gap-2">
+									<Joystick />
 								</div>
 							</div>
 						</div>

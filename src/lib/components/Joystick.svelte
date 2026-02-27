@@ -7,7 +7,7 @@
 		throw new Error('Joystick must be used inside BaseProvider');
 	}
 
-	const { setVelocityMutation } = baseContext;
+	const { setVelocityMutation, maxLinearSpeed, maxAngularSpeed } = baseContext;
 
 	let container: HTMLDivElement;
 	let knob: SVGCircleElement;
@@ -67,10 +67,6 @@
 		
 		const linearY = -y / maxDist; // range [-1, 1]
 		const angularZ = -x / maxDist; // range [-1, 1]
-
-		// You might want to scale these by some max speed
-		const maxLinearSpeed = 300; // mm/s
-		const maxAngularSpeed = 90; // deg/s
 
 		setVelocityMutation.mutate([
 			{ x: 0, y: Number((linearY * maxLinearSpeed).toFixed(2)), z: 0 },

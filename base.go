@@ -143,6 +143,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		cfg:                  conf,
 		conn:                 conn,
 		serialPort:           conf.SerialPort,
+		roombaSensor:         roombaSensor,
 		widthMM:              widthMM,
 		wheelCircumferenceMM: wheelCircumferenceMM,
 		opMgr:                operation.NewSingleOperationManager(),
@@ -481,21 +482,26 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 
 	case "add_song":
 		//lotrBytes = [140][1][16][62][16][60][16][57][16][55][32][53][16][55][16][57][16][62][32][60][16][57][16][55][16][53][32][55][16][57][16][53][16][50][32]
-		lotrBytes := []byte{0x8C, 0x01, 0x10, 0x3E, 0x10, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x20, 0x35, 0x10, 0x37, 0x10, 0x39, 0x10, 0x3E, 0x20, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x10, 0x35, 0x20, 0x37, 0x10, 0x39, 0x10, 0x35, 0x10, 0x32, 0x20}
+		lotrBytes := []byte{0x01, 0x10, 0x3E, 0x10, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x20, 0x35, 0x10, 0x37, 0x10, 0x39, 0x10, 0x3E, 0x20, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x10, 0x35, 0x20, 0x37, 0x10, 0x39, 0x10, 0x35, 0x10, 0x32, 0x20}
 		if err := s.conn.roomba.Write(0x8C, lotrBytes); err != nil {
 			return nil, fmt.Errorf("failed to write song: %w", err)
 		}
 		return map[string]any{"status": "song_written"}, nil
 
 	case "play_song":
-		// ser.write(bytes([141, 0]))
-		if err := s.conn.roomba.Write(0x8D, []byte{0x00}); err != nil {
+		// ser.write(bytes([141, 1]))
+		if err := s.conn.roomba.Write(0x8D, []byte{0x01}); err != nil {
 			return nil, fmt.Errorf("failed to play song: %w", err)
 		}
 		return map[string]any{"status": "song_played"}, nil
 	case "toggle_automatic_mode":
 		s.automaticMode = !s.automaticMode
 		s.logger.Infof("Automatic mode toggled to %v", s.automaticMode)
+		if s.automaticMode {
+			go s.start_automatic_mode()
+		} else {
+			s.logger.Infof("Automatic mode stopped")
+		}
 		return map[string]any{"automatic_mode": s.automaticMode}, nil
 
 	case "get_automatic_mode":
@@ -613,20 +619,36 @@ func choose_direction() float64 {
 	}
 }
 
-func (s *viamRoombaBase) automatic_mode(ctx context.Context) error {
-	for s.in_automatic_mode {
+func (s *viamRoombaBase) start_automatic_mode() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.conn.roomba.Write(0x8D, []byte{0x01})
+	s.logger.Info("start_automatic_mode: entered")
+	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
+	for {
+		s.logger.Info("start_automatic_mode: loop iteration starting")
 		// move forward a bit
-		distanceMm := 100
-		mmPerSec := 100.0
+		distanceMm := 500
+		mmPerSec := 500.0
+		s.logger.Infof("start_automatic_mode: moving straight distance=%d mm, speed=%.1f mm/s", distanceMm, mmPerSec)
 		if err := s.MoveStraight(ctx, distanceMm, mmPerSec, nil); err != nil {
-			return fmt.Errorf("failed to move straight: %w", err)
+			s.logger.Infof("start_automatic_mode: MoveStraight failed: %v", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
+		s.logger.Info("start_automatic_mode: move straight completed")
 		// wait for distance/mmPerSec seconds
-		time.Sleep(time.Duration(float64(distanceMm)/mmPerSec) * time.Second)
+		sleepDur := time.Duration(float64(distanceMm)/mmPerSec) * time.Second
+		s.logger.Infof("start_automatic_mode: sleeping %.2f s after move", sleepDur.Seconds())
+		time.Sleep(sleepDur)
+		s.logger.Info("start_automatic_mode: reading sensor readings")
 		readings, err := s.roombaSensor.Readings(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("failed to read sensor readings: %w", err)
+			s.logger.Infof("start_automatic_mode: Readings failed: %v", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
 		}
+		s.logger.Info("start_automatic_mode: got sensor readings, checking obstacles")
 
 		// Immediate check if we are actually going to hit something
 		// Bumps are really bad wall and cliffs are probably fine (maybe split those up asp)
@@ -639,19 +661,29 @@ func (s *viamRoombaBase) automatic_mode(ctx context.Context) error {
 		cliff_right := readings["cliff_right"].(bool)
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
 			//  TODO: place obstacles in a world service here
-			s.logger.Infof("Obstacles detected, turning away: [wall: %v, cliff_left: %v, cliff_front_left: %v, cliff_front_right: %v, cliff_right: %v]", wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
+			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
+				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
 			angleDeg := choose_direction()
 			degsPerSec := 100.0
+			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
 			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {
-				return fmt.Errorf("failed to spin: %w", err)
+				s.logger.Infof("start_automatic_mode: Spin failed: %v", err)
+				time.Sleep(100 * time.Millisecond)
+				continue
 			}
+			s.logger.Info("start_automatic_mode: spin completed")
 			// wait for angleDeg/degsPerSec seconds
-			time.Sleep(time.Duration(math.Abs(angleDeg)/degsPerSec) * time.Second)
+			spinSleepDur := time.Duration(math.Abs(angleDeg)/degsPerSec) * time.Second
+			s.logger.Infof("start_automatic_mode: sleeping %.2f s after spin", spinSleepDur.Seconds())
+			time.Sleep(spinSleepDur)
+			s.logger.Info("start_automatic_mode: continuing loop after obstacle turn")
 			continue
 		}
 
+		s.logger.Info("start_automatic_mode: no obstacles, continuing loop")
 		// TODO: use obstacle detect service to check if other stuff in way with non roomba native sensors (&& place obstacles in a world service here)
 
 	}
+	s.logger.Info("start_automatic_mode: exited (in_automatic_mode is false)")
 	return nil
 }

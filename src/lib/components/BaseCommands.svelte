@@ -27,6 +27,10 @@
 		doCommandMutation.mutate([{ command: 'stop' }]);
 	}
 
+	function seekDock() {
+		doCommandMutation.mutate([{ command: 'seek_dock' }]);
+	}
+
 	function spin() {
 		spinMutation.mutate([angleDeg, degsPerSec]);
 	}
@@ -63,6 +67,15 @@
 			class="rounded-lg bg-red-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-red-500 disabled:opacity-50 disabled:pointer-events-none"
 		>
 			Stop
+		</button>
+
+		<button
+			type="button"
+			onclick={seekDock}
+			disabled={doCommandMutation.isPending}
+			class="rounded-lg bg-slate-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-slate-500 disabled:opacity-50 disabled:pointer-events-none"
+		>
+			Seek Dock
 		</button>
 
 		{#if doCommandMutation.isError}

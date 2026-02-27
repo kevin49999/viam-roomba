@@ -11,6 +11,7 @@
 	import CameraProvider from './CameraProvider.svelte';
 	import Joystick from './Joystick.svelte';
 	import OIMode from './OIMode.svelte';
+	import AutomaticMode from './AutomaticMode.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
 	import RoombaVisualizer from './RoombaVisualizer.svelte';
 
@@ -59,7 +60,10 @@
 								<div class="flex flex-col gap-6">
 									<div class="flex flex-col gap-2">
 										<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
-										<OIMode />
+										<div class="flex flex-wrap items-center gap-4">
+											<OIMode />
+											<AutomaticMode />
+										</div>
 									</div>
 									
 									<div class="flex flex-col gap-2">

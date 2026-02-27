@@ -68,6 +68,8 @@ type viamRoombaBase struct {
 	pos_y_mm    float64
 	bearing_deg float64
 
+	automaticMode bool
+
 	cancelCtx  context.Context
 	cancelFunc func()
 }
@@ -470,6 +472,14 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 			return nil, fmt.Errorf("failed to play song: %w", err)
 		}
 		return map[string]any{"status": "song_played"}, nil
+
+	case "toggle_automatic_mode":
+		s.automaticMode = !s.automaticMode
+		s.logger.Infof("Automatic mode toggled to %v", s.automaticMode)
+		return map[string]any{"automatic_mode": s.automaticMode}, nil
+
+	case "get_automatic_mode":
+		return map[string]any{"automatic_mode": s.automaticMode}, nil
 
 	default:
 		s.logger.Infof("DoCommand: unknown command '%s'", cmdName)

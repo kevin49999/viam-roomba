@@ -22,8 +22,12 @@ type roombaConn struct {
 
 // ResetConn assumes the `rc.mu` is held.
 func (rc *roombaConn) ResetConn() {
+	// Caller should already hold rc.mu; log before and after reset for debugging.
+	start := time.Now()
+	fmt.Println("roombaConn.ResetConn: resetting underlying serial connection")
 	rc.roomba.S.(io.Closer).Close()
 	rc.roomba.Open(115200)
+	fmt.Printf("roombaConn.ResetConn: reset complete in %s\n", time.Since(start))
 }
 
 func (rc *roombaConn) StartHealthCheck() {
@@ -31,6 +35,7 @@ func (rc *roombaConn) StartHealthCheck() {
 		// Get OI mode.
 		_, err := rc.roomba.Sensors(35)
 		if err != nil {
+			fmt.Printf("roombaConn.StartHealthCheck: OI mode sensor read failed, resetting connection: %v\n", err)
 			rc.ResetConn()
 		}
 	})
@@ -46,6 +51,7 @@ func acquireConn(serialPort string) (*roombaConn, error) {
 	defer globalMu.Unlock()
 	if conn, ok := connections[serialPort]; ok {
 		conn.refs++
+		fmt.Printf("acquireConn: reusing existing connection on %s (refs=%d)\n", serialPort, conn.refs)
 		return conn, nil
 	}
 	r, err := roomba.MakeRoomba(serialPort)
@@ -61,6 +67,8 @@ func acquireConn(serialPort string) (*roombaConn, error) {
 	go conn.StartHealthCheck()
 	connections[serialPort] = conn
 
+	fmt.Printf("acquireConn: created new connection on %s\n", serialPort)
+
 	return conn, nil
 }
 
@@ -69,11 +77,13 @@ func releaseConn(serialPort string, logger logging.Logger) {
 	defer globalMu.Unlock()
 	conn, ok := connections[serialPort]
 	if !ok {
+		logger.Infof("releaseConn: attempted to release unknown connection on %s", serialPort)
 		return
 	}
 
 	conn.refs--
 	if conn.refs <= 0 {
+		logger.Infof("releaseConn: closing connection on %s", serialPort)
 		conn.healthWorker.Stop()
 		delete(connections, serialPort)
 		if closer, ok := conn.roomba.S.(io.Closer); ok {

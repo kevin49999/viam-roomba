@@ -667,6 +667,9 @@ func (s *viamRoombaBase) choose_direction() float64 {
 			near_obstacles = append(near_obstacles, obstacle)
 		}
 	}
+	if len(near_obstacles) == 0 {
+		return 90.0 + rand.Float64()*90.0 - 45.0
+	}
 
 	// get average position of near obstacles
 	average_x := 0.0

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand"
 	"time"
 
 	"github.com/golang/geo/r3"
@@ -658,14 +657,29 @@ func (s *viamRoombaBase) Close(ctx context.Context) error {
 	return nil
 }
 
-func choose_direction() float64 {
-	// random 90 left or right right now
-	direction := rand.Intn(2)
-	if direction == 0 {
-		return 90.0
-	} else {
-		return -90.0
+func (s *viamRoombaBase) choose_direction() float64 {
+	//  get any near obstacles
+	near_obstacles := []ObstaclePosition{}
+	for _, obstacle := range s.obstaclePositions {
+		distance := math.Sqrt(math.Pow(obstacle.x_mm-s.pos_x_mm, 2) + math.Pow(obstacle.y_mm-s.pos_y_mm, 2))
+		if distance < 500 {
+			near_obstacles = append(near_obstacles, obstacle)
+		}
 	}
+
+	// get average position of near obstacles
+	average_x := 0.0
+	average_y := 0.0
+	for _, obstacle := range near_obstacles {
+		average_x += obstacle.x_mm
+		average_y += obstacle.y_mm
+	}
+	average_x /= float64(len(near_obstacles))
+	average_y /= float64(len(near_obstacles))
+
+	// get direction to average position
+	direction := math.Atan2(average_y-s.pos_y_mm, average_x-s.pos_x_mm) * 180.0 / math.Pi
+	return direction + 180.0
 }
 
 func (s *viamRoombaBase) add_obstacle_position(distance_in_front_of_roomba_mm float64) {
@@ -737,7 +751,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 				continue
 			}
 			s.logger.Info("start_automatic_mode: move backwards completed")
-			angleDeg := choose_direction()
+			angleDeg := s.choose_direction()
 			degsPerSec := 100.0
 			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
 			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {
@@ -783,7 +797,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 				continue
 			}
 			s.logger.Info("start_automatic_mode: move backwards completed")
-			angleDeg := choose_direction()
+			angleDeg := s.choose_direction()
 			degsPerSec := 100.0
 			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
 			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {

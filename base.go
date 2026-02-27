@@ -148,6 +148,11 @@ func (s *viamRoombaBase) Name() resource.Name {
 func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPerSec float64, extra map[string]any) error {
 	ctx, done := s.opMgr.New(ctx)
 	defer done()
+	//read the distance to reset the distance
+	_, err := s.readDistance()
+	if err != nil {
+		return fmt.Errorf("failed to read distance: %w", err)
+	}
 
 	if distanceMm == 0 || mmPerSec == 0 {
 		return s.Stop(ctx, extra)
@@ -200,6 +205,13 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 		return s.cancelCtx.Err()
 	}
 
+	//read the distance again to get the actual distance
+	distance, err := s.readDistance()
+	if err != nil {
+		return fmt.Errorf("failed to read distance: %w", err)
+	}
+	s.logger.Debugf("MoveStraight: actual distance=%.2f mm requested distance=%.2f mm", distance, distanceMm)
+
 	return s.Stop(ctx, extra)
 }
 
@@ -210,6 +222,11 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec float64, extra map[string]any) error {
 	ctx, done := s.opMgr.New(ctx)
 	defer done()
+	//read to reset the angle
+	_, err := s.readAngle()
+	if err != nil {
+		return fmt.Errorf("failed to read angle: %w", err)
+	}
 
 	if angleDeg == 0 || degsPerSec == 0 {
 		return s.Stop(ctx, extra)
@@ -264,6 +281,13 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 		s.Stop(ctx, extra)
 		return s.cancelCtx.Err()
 	}
+
+	//read the angle again to get the actual angle
+	angle, err := s.readAngle()
+	if err != nil {
+		return fmt.Errorf("failed to read angle: %w", err)
+	}
+	s.logger.Debugf("Spin: actual angle=%.2f deg requested angle=%.2f deg", angle, angleDeg)
 
 	return s.Stop(ctx, extra)
 }

@@ -13,7 +13,7 @@
 	const distance = $derived.by(() => {
 		const data = query.data;
 		if (data == null || typeof data !== 'object' || Array.isArray(data)) return undefined;
-		const raw = (data as Record<string, unknown>)['dist'];
+		const raw = (data as Record<string, unknown>)['distance'];
 		if (typeof raw !== 'number') return undefined;
 		return raw;
 	});

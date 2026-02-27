@@ -36,6 +36,7 @@ type Config struct {
 	WidthMM              int    `json:"width_mm,omitempty"`
 	WheelCircumferenceMM int    `json:"wheel_circumference_mm,omitempty"`
 	RoombaSensor         string `json:"roomba_sensor,omitempty"`
+	UltrasonicSensor     string `json:"ultrasonic_sensor,omitempty"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -54,7 +55,11 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("%s: roomba_sensor must be a valid sensor model", path)
 	}
 
-	return []string{cfg.RoombaSensor}, nil, nil
+	if cfg.UltrasonicSensor == "" {
+		return nil, nil, fmt.Errorf("%s: ultrasonic_sensor must be a valid sensor model", path)
+	}
+
+	return []string{cfg.RoombaSensor, cfg.UltrasonicSensor}, nil, nil
 }
 
 type viamRoombaBase struct {
@@ -64,9 +69,10 @@ type viamRoombaBase struct {
 	logger logging.Logger
 	cfg    *Config
 
-	conn         *roombaConn
-	roombaSensor sensor.Sensor
-	serialPort   string
+	conn             *roombaConn
+	roombaSensor     sensor.Sensor
+	ultrasonicSensor sensor.Sensor
+	serialPort       string
 
 	widthMM              int
 	wheelCircumferenceMM int
@@ -94,10 +100,15 @@ func newViamRoombaBase(ctx context.Context, deps resource.Dependencies, rawConf 
 		return nil, err
 	}
 
-	return NewBase(ctx, deps, rawConf.ResourceName(), conf, roombaSensor, logger)
+	ultrasonicSensor, err := sensor.FromProvider(deps, conf.UltrasonicSensor)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewBase(ctx, deps, rawConf.ResourceName(), conf, roombaSensor, ultrasonicSensor, logger)
 }
 
-func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, roombaSensor sensor.Sensor, logger logging.Logger) (base.Base, error) {
+func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, roombaSensor sensor.Sensor, ultrasonicSensor sensor.Sensor, logger logging.Logger) (base.Base, error) {
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
 
 	conn, err := acquireConn(conf.SerialPort)
@@ -144,6 +155,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		conn:                 conn,
 		serialPort:           conf.SerialPort,
 		roombaSensor:         roombaSensor,
+		ultrasonicSensor:     ultrasonicSensor,
 		widthMM:              widthMM,
 		wheelCircumferenceMM: wheelCircumferenceMM,
 		opMgr:                operation.NewSingleOperationManager(),
@@ -486,6 +498,31 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		if err := s.conn.roomba.Write(0x8C, lotrBytes); err != nil {
 			return nil, fmt.Errorf("failed to write song: %w", err)
 		}
+		// Write Darth Vader's Theme (Imperial March) under song slot 0.
+		// This is a very compressed version (tune bytes limited to Roomba format).
+		// Song 0, 16 notes, each note: (note, duration). See Roomba docs for midi numbers.
+		vaderBytes := []byte{
+			0x00, 0x10, 0x37, 0x10, // G2
+			0x37, 0x10, // G2
+			0x37, 0x10, // G2
+			0x3C, 0x08, // Eb3
+			0x41, 0x08, // Bb3
+			0x37, 0x10, // G2
+			0x3C, 0x08, // Eb3
+			0x41, 0x08, // Bb3
+			0x37, 0x20, // G2 (long)
+			0x44, 0x10, // D3
+			0x44, 0x10, // D3
+			0x44, 0x10, // D3
+			0x45, 0x08, // Db3
+			0x41, 0x08, // Bb3
+			0x3E, 0x10, // Ab2
+			0x3C, 0x08, // Eb3
+		}
+		// Write the song to Roomba
+		if err := s.conn.roomba.Write(0x8C, vaderBytes); err != nil {
+			return nil, fmt.Errorf("failed to write Vader's theme song: %w", err)
+		}
 		return map[string]any{"status": "song_written"}, nil
 
 	case "play_song":
@@ -494,6 +531,11 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 			return nil, fmt.Errorf("failed to play song: %w", err)
 		}
 		return map[string]any{"status": "song_played"}, nil
+	case "play_vader_song":
+		if err := s.conn.roomba.Write(0x8D, []byte{0x00}); err != nil {
+			return nil, fmt.Errorf("failed to play Vader's theme song: %w", err)
+		}
+		return map[string]any{"status": "vader_song_played"}, nil
 	case "toggle_automatic_mode":
 		s.automaticMode = !s.automaticMode
 		s.logger.Infof("Automatic mode toggled to %v", s.automaticMode)
@@ -624,8 +666,9 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 	defer cancel()
 	s.conn.roomba.Write(0x8D, []byte{0x01})
 	s.logger.Info("start_automatic_mode: entered")
+	s.in_automatic_mode = true
 	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
-	for {
+	for s.in_automatic_mode {
 		s.logger.Info("start_automatic_mode: loop iteration starting")
 		// move forward a bit
 		distanceMm := 500
@@ -659,10 +702,21 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		cliff_front_left := readings["cliff_front_left"].(bool)
 		cliff_front_right := readings["cliff_front_right"].(bool)
 		cliff_right := readings["cliff_right"].(bool)
+
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
 			//  TODO: place obstacles in a world service here
 			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
 				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
+			// go backwards
+			distanceMm := 500
+			mmPerSec := 500.0
+			s.logger.Infof("start_automatic_mode: moving backwards distance=%d mm, speed=%.1f mm/s", distanceMm, mmPerSec)
+			if err := s.MoveStraight(ctx, -distanceMm, mmPerSec, nil); err != nil {
+				s.logger.Infof("start_automatic_mode: MoveStraight failed: %v", err)
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			s.logger.Info("start_automatic_mode: move backwards completed")
 			angleDeg := choose_direction()
 			degsPerSec := 100.0
 			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
@@ -681,6 +735,43 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		}
 
 		s.logger.Info("start_automatic_mode: no obstacles, continuing loop")
+		ultrasonic_readings, err := s.ultrasonicSensor.Readings(ctx, nil)
+		if err != nil {
+			s.logger.Infof("start_automatic_mode: Readings failed: %v", err)
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		s.logger.Info("start_automatic_mode: got ultrasonic sensor readings, checking obstacles")
+		ultrasonic_distance_m := ultrasonic_readings["distance"].(float64)
+		s.logger.Infof("start_automatic_mode: ultrasonic_distance=%f m", ultrasonic_distance_m)
+		if ultrasonic_distance_m < 0.75 {
+			s.logger.Infof("start_automatic_mode: ultrasonic_distance is too close, turning away")
+			// go backwards
+			distanceMm := -500
+			mmPerSec := 500.0
+			s.logger.Infof("start_automatic_mode: moving backwards distance=%d mm, speed=%.1f mm/s", distanceMm, mmPerSec)
+			if err := s.MoveStraight(ctx, distanceMm, mmPerSec, nil); err != nil {
+				s.logger.Infof("start_automatic_mode: MoveStraight failed: %v", err)
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			s.logger.Info("start_automatic_mode: move backwards completed")
+			angleDeg := choose_direction()
+			degsPerSec := 100.0
+			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
+			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {
+				s.logger.Infof("start_automatic_mode: Spin failed: %v", err)
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+			s.logger.Info("start_automatic_mode: spin completed")
+			// wait for angleDeg/degsPerSec seconds
+			spinSleepDur := time.Duration(math.Abs(angleDeg)/degsPerSec) * time.Second
+			s.logger.Infof("start_automatic_mode: sleeping %.2f s after spin", spinSleepDur.Seconds())
+			time.Sleep(spinSleepDur)
+			s.logger.Info("start_automatic_mode: continuing loop after ultrasonic obstacle turn")
+			continue
+		}
 		// TODO: use obstacle detect service to check if other stuff in way with non roomba native sensors (&& place obstacles in a world service here)
 
 	}

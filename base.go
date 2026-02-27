@@ -702,6 +702,10 @@ func (s *viamRoombaBase) add_obstacle_position(distance_in_front_of_roomba_mm fl
 func (s *viamRoombaBase) start_automatic_mode() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	s.pos_x_mm = 0
+	s.pos_y_mm = 0
+	s.bearing_deg = 0
+	s.obstaclePositions = []ObstaclePosition{}
 	s.conn.roomba.Write(0x8D, []byte{0x01})
 	s.logger.Info("start_automatic_mode: entered")
 	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
@@ -742,6 +746,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		cliff_right := readings["cliff_right"].(bool)
 
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
+			s.add_obstacle_position(10)
 			//  TODO: place obstacles in a world service here
 			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
 				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
@@ -790,6 +795,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		ultrasonic_distance_m := ultrasonic_readings["distance"].(float64)
 		s.logger.Infof("start_automatic_mode: ultrasonic_distance=%f m", ultrasonic_distance_m)
 		if ultrasonic_distance_m < 0.75 {
+			s.add_obstacle_position(ultrasonic_distance_m * 1000.0)
 			s.logger.Infof("start_automatic_mode: ultrasonic_distance is too close, turning away")
 			// go backwards
 			distanceMm := -500

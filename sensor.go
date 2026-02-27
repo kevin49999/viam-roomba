@@ -209,7 +209,7 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	readings["requested_radius_mm"] = int(i16(25))
 
 	// Packet 58: Stasis
-	readings["stasis"] = int(uint8(b(28)))
+	readings["stasis"] = uint8(b(28))
 
 	return readings, nil
 }

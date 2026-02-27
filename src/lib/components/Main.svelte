@@ -14,6 +14,7 @@
 	import AutomaticMode from './AutomaticMode.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
 	import RoombaVisualizer from './RoombaVisualizer.svelte';
+	import UltraSonic from './UltraSonic.svelte';
 
 	let { host, credentials, machineId } = $props<{
 		host: string;
@@ -51,7 +52,12 @@
 									<h1 class="text-xl font-bold text-slate-900 dark:text-white">Roomba Dashboard</h1>
 									<p class="text-xs text-slate-500 font-mono mt-1">{host}</p>
 								</div>
-								<BatteryPercent />
+								<div class="flex items-center gap-6">
+									<ReadingsProvider partID={DEFAULT_PART_ID} name="ultra-sonic">
+										<UltraSonic />
+									</ReadingsProvider>
+									<BatteryPercent />
+								</div>
 							</div>
 
 							<div class="h-px bg-slate-100 dark:bg-slate-800"></div>

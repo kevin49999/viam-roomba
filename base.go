@@ -456,6 +456,21 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		}()
 		return map[string]any{"status": "move_straight_started"}, nil
 
+	case "add_song":
+		//lotrBytes = [140][1][16][62][16][60][16][57][16][55][32][53][16][55][16][57][16][62][32][60][16][57][16][55][16][53][32][55][16][57][16][53][16][50][32]
+		lotrBytes := []byte{0x8C, 0x01, 0x10, 0x3E, 0x10, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x20, 0x35, 0x10, 0x37, 0x10, 0x39, 0x10, 0x3E, 0x20, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x10, 0x35, 0x20, 0x37, 0x10, 0x39, 0x10, 0x35, 0x10, 0x32, 0x20}
+		if err := s.conn.roomba.Write(0x8C, lotrBytes); err != nil {
+			return nil, fmt.Errorf("failed to write song: %w", err)
+		}
+		return map[string]any{"status": "song_written"}, nil
+
+	case "play_song":
+		// ser.write(bytes([141, 0]))
+		if err := s.conn.roomba.Write(0x8D, []byte{0x00}); err != nil {
+			return nil, fmt.Errorf("failed to play song: %w", err)
+		}
+		return map[string]any{"status": "song_played"}, nil
+
 	default:
 		s.logger.Infof("DoCommand: unknown command '%s'", cmdName)
 		return nil, fmt.Errorf("unknown command: %s", cmdName)

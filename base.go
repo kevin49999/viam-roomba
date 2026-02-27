@@ -661,13 +661,19 @@ func choose_direction() float64 {
 	}
 }
 
+// WARNING: very messy code below
 func (s *viamRoombaBase) start_automatic_mode() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	s.conn.roomba.Write(0x8D, []byte{0x01})
 	s.logger.Info("start_automatic_mode: entered")
+	if s.in_automatic_mode {
+		s.logger.Info("start_automatic_mode: already in automatic mode, exiting")
+		return nil
+	}
 	s.in_automatic_mode = true
 	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
+	// NOTE: TO EXIT AUTO MODE WE HAVE TO RESTART THE MODULE ( there was a weird bug where it would reconfigure and then automatic mode would stop)
 	for s.in_automatic_mode {
 		s.logger.Info("start_automatic_mode: loop iteration starting")
 		// move forward a bit
@@ -735,7 +741,14 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		}
 
 		s.logger.Info("start_automatic_mode: no obstacles, continuing loop")
-		ultrasonic_readings, err := s.ultrasonicSensor.Readings(ctx, nil)
+		timeoutContext, cancelTimeout := context.WithTimeout(ctx, 1000*time.Millisecond)
+		defer cancelTimeout()
+		ultrasonic_readings, err := s.ultrasonicSensor.Readings(timeoutContext, nil)
+		if err == context.DeadlineExceeded {
+			s.logger.Infof("start_automatic_mode: ultrasonic sensor read timed out")
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
 		if err != nil {
 			s.logger.Infof("start_automatic_mode: Readings failed: %v", err)
 			time.Sleep(100 * time.Millisecond)

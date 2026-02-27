@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"time"
 
 	"github.com/golang/geo/r3"
 	base "go.viam.com/rdk/components/base"
+	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/operation"
 	"go.viam.com/rdk/resource"
@@ -33,6 +35,7 @@ type Config struct {
 	SerialPort           string `json:"serial_port"`
 	WidthMM              int    `json:"width_mm,omitempty"`
 	WheelCircumferenceMM int    `json:"wheel_circumference_mm,omitempty"`
+	RoombaSensor         string `json:"roomba_sensor,omitempty"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -47,7 +50,11 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("%s: wheel_circumference_mm must be a positive number", path)
 	}
 
-	return nil, nil, nil
+	if cfg.RoombaSensor != "" {
+		return nil, nil, fmt.Errorf("%s: roomba_sensor must be a valid sensor model", path)
+	}
+
+	return []string{cfg.RoombaSensor}, nil, nil
 }
 
 type viamRoombaBase struct {
@@ -57,16 +64,18 @@ type viamRoombaBase struct {
 	logger logging.Logger
 	cfg    *Config
 
-	conn       *roombaConn
-	serialPort string
+	conn         *roombaConn
+	roombaSensor sensor.Sensor
+	serialPort   string
 
 	widthMM              int
 	wheelCircumferenceMM int
 
-	opMgr       *operation.SingleOperationManager
-	pos_x_mm    float64
-	pos_y_mm    float64
-	bearing_deg float64
+	opMgr             *operation.SingleOperationManager
+	pos_x_mm          float64
+	pos_y_mm          float64
+	bearing_deg       float64
+	in_automatic_mode bool
 
 	automaticMode bool
 
@@ -135,6 +144,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		pos_x_mm:             0,
 		pos_y_mm:             0,
 		bearing_deg:          0,
+		in_automatic_mode:    false,
 		cancelCtx:            cancelCtx,
 		cancelFunc:           cancelFunc,
 	}
@@ -303,6 +313,9 @@ func (s *viamRoombaBase) SetPower(ctx context.Context, linear r3.Vector, angular
 // linear is in mmPerSec (positive Y moves forwards for built-in RDK drivers).
 // angular is in degsPerSec (positive Z turns to the left for built-in RDK drivers).
 func (s *viamRoombaBase) SetVelocity(ctx context.Context, linear r3.Vector, angular r3.Vector, extra map[string]any) error {
+	if s.in_automatic_mode {
+		return fmt.Errorf("automatic mode is enabled, SetVelocity is not allowed")
+	}
 	s.conn.mu.Lock()
 	defer s.conn.mu.Unlock()
 
@@ -369,6 +382,9 @@ func (s *viamRoombaBase) Stop(ctx context.Context, extra map[string]any) error {
 }
 
 func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
+	if s.in_automatic_mode && cmd["command"] != "toggle_automatic_mode" {
+		return nil, fmt.Errorf("automatic mode is enabled, only toggle_automatic_mode command is allowed")
+	}
 	s.conn.mu.Lock()
 	defer s.conn.mu.Unlock()
 
@@ -472,6 +488,12 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 			return nil, fmt.Errorf("failed to play song: %w", err)
 		}
 		return map[string]any{"status": "song_played"}, nil
+	case "toggle_automatic_mode":
+		s.in_automatic_mode = !s.in_automatic_mode
+		return map[string]any{"status": "automatic_mode_toggled", "in_automatic_mode": s.in_automatic_mode}, nil
+	case "get_automatic_mode":
+		//  TODO: maybe should rethink what component and this logic should be in? Top level roomba brain service??
+		return map[string]any{"in_automatic_mode": s.in_automatic_mode}, nil
 
 	case "toggle_automatic_mode":
 		s.automaticMode = !s.automaticMode
@@ -580,5 +602,58 @@ func (s *viamRoombaBase) Close(ctx context.Context) error {
 	releaseConn(s.serialPort, s.logger)
 
 	s.logger.Info("Roomba base closed")
+	return nil
+}
+
+func choose_direction() float64 {
+	// random 90 left or right right now
+	direction := rand.Intn(2)
+	if direction == 0 {
+		return 90.0
+	} else {
+		return -90.0
+	}
+}
+
+func (s *viamRoombaBase) automatic_mode(ctx context.Context) error {
+	for s.in_automatic_mode {
+		// move forward a bit
+		distanceMm := 100
+		mmPerSec := 100.0
+		if err := s.MoveStraight(ctx, distanceMm, mmPerSec, nil); err != nil {
+			return fmt.Errorf("failed to move straight: %w", err)
+		}
+		// wait for distance/mmPerSec seconds
+		time.Sleep(time.Duration(float64(distanceMm)/mmPerSec) * time.Second)
+		readings, err := s.roombaSensor.Readings(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("failed to read sensor readings: %w", err)
+		}
+
+		// Immediate check if we are actually going to hit something
+		// Bumps are really bad wall and cliffs are probably fine (maybe split those up asp)
+		bump_right := readings["bump_right"].(bool)
+		bump_left := readings["bump_left"].(bool)
+		wall := readings["wall"].(bool)
+		cliff_left := readings["cliff_left"].(bool)
+		cliff_front_left := readings["cliff_front_left"].(bool)
+		cliff_front_right := readings["cliff_front_right"].(bool)
+		cliff_right := readings["cliff_right"].(bool)
+		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
+			//  TODO: place obstacles in a world service here
+			s.logger.Infof("Obstacles detected, turning away: [wall: %v, cliff_left: %v, cliff_front_left: %v, cliff_front_right: %v, cliff_right: %v]", wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
+			angleDeg := choose_direction()
+			degsPerSec := 100.0
+			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {
+				return fmt.Errorf("failed to spin: %w", err)
+			}
+			// wait for angleDeg/degsPerSec seconds
+			time.Sleep(time.Duration(math.Abs(angleDeg)/degsPerSec) * time.Second)
+			continue
+		}
+
+		// TODO: use obstacle detect service to check if other stuff in way with non roomba native sensors (&& place obstacles in a world service here)
+
+	}
 	return nil
 }

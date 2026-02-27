@@ -89,10 +89,15 @@ func newViamRoombaBase(ctx context.Context, deps resource.Dependencies, rawConf 
 		return nil, err
 	}
 
-	return NewBase(ctx, deps, rawConf.ResourceName(), conf, logger)
+	roombaSensor, err := sensor.FromProvider(deps, conf.RoombaSensor)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewBase(ctx, deps, rawConf.ResourceName(), conf, roombaSensor, logger)
 }
 
-func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, logger logging.Logger) (base.Base, error) {
+func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *Config, roombaSensor sensor.Sensor, logger logging.Logger) (base.Base, error) {
 	cancelCtx, cancelFunc := context.WithCancel(context.Background())
 
 	conn, err := acquireConn(conf.SerialPort)

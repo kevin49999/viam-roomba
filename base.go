@@ -63,7 +63,10 @@ type viamRoombaBase struct {
 	widthMM              int
 	wheelCircumferenceMM int
 
-	opMgr *operation.SingleOperationManager
+	opMgr       *operation.SingleOperationManager
+	pos_x_mm    float64
+	pos_y_mm    float64
+	bearing_deg float64
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -122,6 +125,9 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		widthMM:              widthMM,
 		wheelCircumferenceMM: wheelCircumferenceMM,
 		opMgr:                operation.NewSingleOperationManager(),
+		pos_x_mm:             0,
+		pos_y_mm:             0,
+		bearing_deg:          0,
 		cancelCtx:            cancelCtx,
 		cancelFunc:           cancelFunc,
 	}
@@ -178,13 +184,19 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 	}
 	s.conn.mu.Unlock()
 
-	s.logger.Debugf("MoveStraight: distance=%d mm, velocity=%d mm/sec, duration=%.2f sec", distanceMm, velocity, duration)
+	s.logger.Infof("MoveStraight: distance=%d mm, velocity=%d mm/sec, duration=%.2f sec", distanceMm, velocity, duration)
 
 	sleepCtx, cancel := context.WithTimeout(ctx, time.Duration(duration*1000)*time.Millisecond)
 	defer cancel()
 
 	select {
 	case <-sleepCtx.Done():
+		delta_x_mm := float64(distanceMm) * math.Cos(s.bearing_deg*math.Pi/180.0)
+		delta_y_mm := float64(distanceMm) * math.Sin(s.bearing_deg*math.Pi/180.0)
+		s.pos_x_mm += delta_x_mm
+		s.pos_y_mm += delta_y_mm
+
+		s.logger.Infof("Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
 	case <-ctx.Done():
 		s.Stop(ctx, extra)
 		return ctx.Err()
@@ -238,7 +250,6 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 		radius = 1
 	} else {
 		radius = -1
-		velocity = -velocity
 	}
 
 	duration := math.Abs(angleDeg / degsPerSec)
@@ -254,13 +265,15 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 	}
 	s.conn.mu.Unlock()
 
-	s.logger.Debugf("Spin: angle=%.2f deg, speed=%.2f deg/sec, velocity=%d mm/s, duration=%.2f sec", angleDeg, degsPerSec, velocity, duration)
+	s.logger.Infof("Spin: angle=%.2f deg, speed=%.2f deg/sec, velocity=%d mm/s, duration=%.2f sec", angleDeg, degsPerSec, velocity, duration)
 
 	sleepCtx, cancel := context.WithTimeout(ctx, time.Duration(duration*1000)*time.Millisecond)
 	defer cancel()
 
 	select {
 	case <-sleepCtx.Done():
+		s.bearing_deg += angleDeg
+		s.logger.Infof("Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
 	case <-ctx.Done():
 		s.Stop(ctx, extra)
 		return ctx.Err()
@@ -414,6 +427,11 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 			return nil, fmt.Errorf("failed to start: %w", err)
 		}
 		return map[string]any{"status": "started"}, nil
+	case "reset_position":
+		s.pos_x_mm = 0
+		s.pos_y_mm = 0
+		s.bearing_deg = 0
+		return map[string]any{"status": "position_reset"}, nil
 
 	case "move_straight":
 		distanceMm, ok := cmd["distance_mm"].(float64)

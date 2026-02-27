@@ -38,6 +38,9 @@
 	function moveStraight() {
 		moveStraightMutation.mutate([distanceMm, mmPerSec]);
 	}
+	function resetPosition() {
+		doCommandMutation.mutate([{ command: 'reset_position' }]);
+	}
 </script>
 
 <div class="flex flex-col gap-4">
@@ -78,6 +81,14 @@
 			Seek Dock
 		</button>
 
+		<button
+			type="button"
+			onclick={resetPosition}
+			disabled={doCommandMutation.isPending}
+			class="rounded-lg bg-slate-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-slate-500 disabled:opacity-50 disabled:pointer-events-none"
+		>
+			Reset Position
+		</button>
 		{#if doCommandMutation.isError}
 			<p class="text-sm text-red-600 dark:text-red-400">{doCommandMutation.error?.message}</p>
 		{/if}

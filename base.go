@@ -63,7 +63,10 @@ type viamRoombaBase struct {
 	widthMM              int
 	wheelCircumferenceMM int
 
-	opMgr *operation.SingleOperationManager
+	opMgr       *operation.SingleOperationManager
+	pos_x_mm    float64
+	pos_y_mm    float64
+	bearing_deg float64
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -122,6 +125,9 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		widthMM:              widthMM,
 		wheelCircumferenceMM: wheelCircumferenceMM,
 		opMgr:                operation.NewSingleOperationManager(),
+		pos_x_mm:             0,
+		pos_y_mm:             0,
+		bearing_deg:          0,
 		cancelCtx:            cancelCtx,
 		cancelFunc:           cancelFunc,
 	}
@@ -142,11 +148,6 @@ func (s *viamRoombaBase) Name() resource.Name {
 func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPerSec float64, extra map[string]any) error {
 	ctx, done := s.opMgr.New(ctx)
 	defer done()
-	//read the distance to reset the distance
-	_, err := s.readDistance()
-	if err != nil {
-		return fmt.Errorf("failed to read distance: %w", err)
-	}
 
 	if distanceMm == 0 || mmPerSec == 0 {
 		return s.Stop(ctx, extra)
@@ -178,13 +179,19 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 	}
 	s.conn.mu.Unlock()
 
-	s.logger.Debugf("MoveStraight: distance=%d mm, velocity=%d mm/sec, duration=%.2f sec", distanceMm, velocity, duration)
+	s.logger.Infof("MoveStraight: distance=%d mm, velocity=%d mm/sec, duration=%.2f sec", distanceMm, velocity, duration)
 
 	sleepCtx, cancel := context.WithTimeout(ctx, time.Duration(duration*1000)*time.Millisecond)
 	defer cancel()
 
 	select {
 	case <-sleepCtx.Done():
+		delta_x_mm := float64(distanceMm) * math.Cos(s.bearing_deg*math.Pi/180.0)
+		delta_y_mm := float64(distanceMm) * math.Sin(s.bearing_deg*math.Pi/180.0)
+		s.pos_x_mm += delta_x_mm
+		s.pos_y_mm += delta_y_mm
+
+		s.logger.Infof("Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
 	case <-ctx.Done():
 		s.Stop(ctx, extra)
 		return ctx.Err()
@@ -192,13 +199,6 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 		s.Stop(ctx, extra)
 		return s.cancelCtx.Err()
 	}
-
-	//read the distance again to get the actual distance
-	distance, err := s.readDistance()
-	if err != nil {
-		return fmt.Errorf("failed to read distance: %w", err)
-	}
-	s.logger.Debugf("MoveStraight: actual distance=%.2f mm requested distance=%.2f mm", distance, distanceMm)
 
 	return s.Stop(ctx, extra)
 }
@@ -210,11 +210,6 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec float64, extra map[string]any) error {
 	ctx, done := s.opMgr.New(ctx)
 	defer done()
-	//read to reset the angle
-	_, err := s.readAngle()
-	if err != nil {
-		return fmt.Errorf("failed to read angle: %w", err)
-	}
 
 	if angleDeg == 0 || degsPerSec == 0 {
 		return s.Stop(ctx, extra)
@@ -238,7 +233,6 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 		radius = 1
 	} else {
 		radius = -1
-		velocity = -velocity
 	}
 
 	duration := math.Abs(angleDeg / degsPerSec)
@@ -254,13 +248,15 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 	}
 	s.conn.mu.Unlock()
 
-	s.logger.Debugf("Spin: angle=%.2f deg, speed=%.2f deg/sec, velocity=%d mm/s, duration=%.2f sec", angleDeg, degsPerSec, velocity, duration)
+	s.logger.Infof("Spin: angle=%.2f deg, speed=%.2f deg/sec, velocity=%d mm/s, duration=%.2f sec", angleDeg, degsPerSec, velocity, duration)
 
 	sleepCtx, cancel := context.WithTimeout(ctx, time.Duration(duration*1000)*time.Millisecond)
 	defer cancel()
 
 	select {
 	case <-sleepCtx.Done():
+		s.bearing_deg += angleDeg
+		s.logger.Infof("Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
 	case <-ctx.Done():
 		s.Stop(ctx, extra)
 		return ctx.Err()
@@ -268,13 +264,6 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 		s.Stop(ctx, extra)
 		return s.cancelCtx.Err()
 	}
-
-	//read the angle again to get the actual angle
-	angle, err := s.readAngle()
-	if err != nil {
-		return fmt.Errorf("failed to read angle: %w", err)
-	}
-	s.logger.Debugf("Spin: actual angle=%.2f deg requested angle=%.2f deg", angle, angleDeg)
 
 	return s.Stop(ctx, extra)
 }
@@ -414,6 +403,11 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 			return nil, fmt.Errorf("failed to start: %w", err)
 		}
 		return map[string]any{"status": "started"}, nil
+	case "reset_position":
+		s.pos_x_mm = 0
+		s.pos_y_mm = 0
+		s.bearing_deg = 0
+		return map[string]any{"status": "position_reset"}, nil
 
 	case "move_straight":
 		distanceMm, ok := cmd["distance_mm"].(float64)

@@ -64,6 +64,11 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	return []string{cfg.RoombaSensor, cfg.UltrasonicSensor}, nil, nil
 }
 
+type ObstaclePosition struct {
+	x_mm float64
+	y_mm float64
+}
+
 type viamRoombaBase struct {
 	resource.AlwaysRebuild
 
@@ -80,6 +85,7 @@ type viamRoombaBase struct {
 	wheelCircumferenceMM int
 
 	opMgr             *operation.SingleOperationManager
+	obstaclePositions []ObstaclePosition
 	pos_x_mm          float64
 	pos_y_mm          float64
 	bearing_deg       float64
@@ -158,6 +164,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		ultrasonicSensor:     ultrasonicSensor,
 		widthMM:              widthMM,
 		wheelCircumferenceMM: wheelCircumferenceMM,
+		obstaclePositions:    []ObstaclePosition{},
 		opMgr:                operation.NewSingleOperationManager(),
 		pos_x_mm:             0,
 		pos_y_mm:             0,
@@ -656,14 +663,39 @@ func (s *viamRoombaBase) Close(ctx context.Context) error {
 	return nil
 }
 
-func choose_direction() float64 {
-	// random 90 left or right right now
-	direction := rand.Intn(2)
-	if direction == 0 {
-		return 90.0
-	} else {
-		return -90.0
+func (s *viamRoombaBase) choose_direction() float64 {
+	//  get any near obstacles
+	near_obstacles := []ObstaclePosition{}
+	for _, obstacle := range s.obstaclePositions {
+		distance := math.Sqrt(math.Pow(obstacle.x_mm-s.pos_x_mm, 2) + math.Pow(obstacle.y_mm-s.pos_y_mm, 2))
+		if distance < 500 {
+			near_obstacles = append(near_obstacles, obstacle)
+		}
 	}
+	if len(near_obstacles) == 0 {
+		return 90.0 + rand.Float64()*90.0 - 45.0
+	}
+
+	// get average position of near obstacles
+	average_x := 0.0
+	average_y := 0.0
+	for _, obstacle := range near_obstacles {
+		average_x += obstacle.x_mm
+		average_y += obstacle.y_mm
+	}
+	average_x /= float64(len(near_obstacles))
+	average_y /= float64(len(near_obstacles))
+
+	// get direction to average position
+	direction := math.Atan2(average_y-s.pos_y_mm, average_x-s.pos_x_mm) * 180.0 / math.Pi
+	return direction + 180.0 + rand.Float64()*90.0 - 45.0
+}
+
+func (s *viamRoombaBase) add_obstacle_position(distance_in_front_of_roomba_mm float64) {
+	obstacle_x := s.pos_x_mm + distance_in_front_of_roomba_mm*math.Cos(s.bearing_deg*math.Pi/180.0)
+	obstacle_y := s.pos_y_mm + distance_in_front_of_roomba_mm*math.Sin(s.bearing_deg*math.Pi/180.0)
+	s.logger.Infof("add_obstacle_position: obstacle_x=%f mm, obstacle_y=%f mm", obstacle_x, obstacle_y)
+	s.obstaclePositions = append(s.obstaclePositions, ObstaclePosition{x_mm: obstacle_x, y_mm: obstacle_y})
 }
 
 // WARNING: very messy code below
@@ -723,7 +755,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 				continue
 			}
 			s.logger.Info("start_automatic_mode: move backwards completed")
-			angleDeg := choose_direction()
+			angleDeg := s.choose_direction()
 			degsPerSec := 100.0
 			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
 			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {
@@ -769,7 +801,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 				continue
 			}
 			s.logger.Info("start_automatic_mode: move backwards completed")
-			angleDeg := choose_direction()
+			angleDeg := s.choose_direction()
 			degsPerSec := 100.0
 			s.logger.Infof("start_automatic_mode: spinning angle=%.1f deg at %.1f deg/s", angleDeg, degsPerSec)
 			if err := s.Spin(ctx, angleDeg, degsPerSec, nil); err != nil {

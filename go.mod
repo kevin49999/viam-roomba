@@ -6,6 +6,7 @@ require (
 	github.com/golang/geo v0.0.0-20230421003525-6adc56603217
 	github.com/parabolala/go-roomba v0.0.0-20171007195948-9743d78e5eca
 	go.viam.com/rdk v0.114.0
+	go.viam.com/utils v0.4.3
 )
 
 require (
@@ -176,7 +177,6 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	go.viam.com/api v0.1.519 // indirect
 	go.viam.com/test v1.2.4 // indirect
-	go.viam.com/utils v0.4.3 // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20230525183740-e7c30c78aeb2 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
 	golang.org/x/exp v0.0.0-20251113190631-e25ba8c21ef6 // indirect

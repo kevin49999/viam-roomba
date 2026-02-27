@@ -195,6 +195,9 @@ const (
 
 	// The radius most recently requested with a Drive command.
 	SENSOR_REQUESTED_RADIUS = 40
+
+	// The stasis byte is returned.
+	SENSOR_STASIS = 58
 	//....
 	SENSOR_ALL = 100
 )
@@ -230,8 +233,8 @@ var SENSOR_PACKET_LENGTH = map[byte]byte{
 	SENSOR_CLIFF_FRONT_RIGHT_SIGNAL: 2,
 	SENSOR_CLIFF_RIGHT_SIGNAL:       2,
 	//unused
-	32: 3,
-	33: 3,
+	32:                        3,
+	33:                        3,
 	SENSOR_CHARGING_SOURCE:    1,
 	SENSOR_OI_MODE:            1,
 	SENSOR_SONG_NUMBER:        1,
@@ -239,6 +242,7 @@ var SENSOR_PACKET_LENGTH = map[byte]byte{
 	SENSOR_NUM_STREAM_PACKETS: 1,
 	SENSOR_REQUESTED_VELOCITY: 2,
 	SENSOR_REQUESTED_RADIUS:   2,
+	SENSOR_STASIS:             1,
 	//....
 	// Group packets.
 	0:          26,

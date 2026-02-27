@@ -16,11 +16,28 @@
 	const doCommandMutation = createResourceMutation(baseClient, 'doCommand');
 	const spinMutation = createResourceMutation(baseClient, 'spin');
 	const moveStraightMutation = createResourceMutation(baseClient, 'moveStraight');
+	const setVelocityMutation = createResourceMutation(baseClient, 'setVelocity');
+
+	let maxLinearSpeed = $state(300);
+	let maxAngularSpeed = $state(90);
 
 	const contextValue: BaseContextValue = {
 		doCommandMutation: doCommandMutation as unknown as BaseContextValue['doCommandMutation'],
 		spinMutation: spinMutation as unknown as BaseContextValue['spinMutation'],
-		moveStraightMutation: moveStraightMutation as unknown as BaseContextValue['moveStraightMutation']
+		moveStraightMutation: moveStraightMutation as unknown as BaseContextValue['moveStraightMutation'],
+		setVelocityMutation: setVelocityMutation as unknown as BaseContextValue['setVelocityMutation'],
+		get maxLinearSpeed() {
+			return maxLinearSpeed;
+		},
+		get maxAngularSpeed() {
+			return maxAngularSpeed;
+		},
+		setMaxLinearSpeed: (speed: number) => {
+			maxLinearSpeed = Math.min(Math.max(0, speed), 500); // 500 mm/s is a reasonable absolute max
+		},
+		setMaxAngularSpeed: (speed: number) => {
+			maxAngularSpeed = Math.min(Math.max(0, speed), 180); // 180 deg/s is a reasonable absolute max
+		}
 	};
 	setContext(BASE_CONTEXT_KEY, contextValue);
 </script>

@@ -9,8 +9,10 @@
 	import BatteryPercent from './BatteryPercent.svelte';
 	import Camera from './Camera.svelte';
 	import CameraProvider from './CameraProvider.svelte';
+	import Joystick from './Joystick.svelte';
 	import OIMode from './OIMode.svelte';
 	import ReadingsProvider from './ReadingsProvider.svelte';
+	import RoombaVisualizer from './RoombaVisualizer.svelte';
 
 	let { host, credentials, machineId } = $props<{
 		host: string;
@@ -54,14 +56,24 @@
 							<div class="h-px bg-slate-100 dark:bg-slate-800"></div>
 
 							<div class="flex flex-wrap items-center gap-6">
-								<div class="flex flex-col gap-2">
-									<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
-									<OIMode />
+								<div class="flex flex-col gap-6">
+									<div class="flex flex-col gap-2">
+										<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
+										<OIMode />
+									</div>
+									
+									<div class="flex flex-col gap-2">
+										<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
+										<BaseCommands />
+									</div>
+
+									<div class="flex flex-col gap-2">
+										<Joystick />
+									</div>
 								</div>
-								
-								<div class="flex flex-col gap-2">
-									<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
-									<BaseCommands />
+
+								<div class="flex-grow max-w-sm">
+									<RoombaVisualizer />
 								</div>
 							</div>
 						</div>

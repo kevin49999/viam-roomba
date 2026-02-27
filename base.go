@@ -50,7 +50,7 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("%s: wheel_circumference_mm must be a positive number", path)
 	}
 
-	if cfg.RoombaSensor != "" {
+	if cfg.RoombaSensor == "" {
 		return nil, nil, fmt.Errorf("%s: roomba_sensor must be a valid sensor model", path)
 	}
 

@@ -20,6 +20,8 @@
 	let container: HTMLDivElement;
 	let knob: SVGCircleElement;
 	let isDragging = $state(false);
+	let keyboardEnabled = $state(false);
+	let keys = $state(new Set<string>());
 	let x = $state(0);
 	let y = $state(0);
 	let size = 150;
@@ -66,6 +68,52 @@
 		updateVelocity(true);
 	}
 
+	function handleKeyDown(event: KeyboardEvent) {
+		if (!keyboardEnabled || isAutomatic) return;
+		const key = event.key.toLowerCase();
+		if (['w', 'a', 's', 'd'].includes(key)) {
+			// Prevent scrolling with WASD if enabled
+			event.preventDefault();
+			keys.add(key);
+			updateKeyboardVelocity();
+		}
+	}
+
+	function handleKeyUp(event: KeyboardEvent) {
+		if (!keyboardEnabled) return;
+		const key = event.key.toLowerCase();
+		if (['w', 'a', 's', 'd'].includes(key)) {
+			keys.delete(key);
+			updateKeyboardVelocity();
+		}
+	}
+
+	function updateKeyboardVelocity() {
+		let linearY = 0;
+		let angularZ = 0;
+
+		if (keys.has('w')) linearY += 1;
+		if (keys.has('s')) linearY -= 1;
+		if (keys.has('a')) angularZ += 1;
+		if (keys.has('d')) angularZ -= 1;
+
+		x = -angularZ * maxDist;
+		y = -linearY * maxDist;
+
+		updateVelocity(keys.size === 0);
+	}
+
+	$effect(() => {
+		if (!keyboardEnabled || isAutomatic) {
+			keys.clear();
+			if (x !== 0 || y !== 0) {
+				x = 0;
+				y = 0;
+				updateVelocity(true);
+			}
+		}
+	});
+
 	let lastUpdate = 0;
 	const THROTTLE_MS = 100;
 
@@ -92,18 +140,32 @@
 		window.addEventListener('mouseup', handleEnd);
 		window.addEventListener('touchmove', handleMove, { passive: false });
 		window.addEventListener('touchend', handleEnd);
+		window.addEventListener('keydown', handleKeyDown);
+		window.addEventListener('keyup', handleKeyUp);
 
 		return () => {
 			window.removeEventListener('mousemove', handleMove);
 			window.removeEventListener('mouseup', handleEnd);
 			window.removeEventListener('touchmove', handleMove);
 			window.removeEventListener('touchend', handleEnd);
+			window.removeEventListener('keydown', handleKeyDown);
+			window.removeEventListener('keyup', handleKeyUp);
 		};
 	});
 </script>
 
 <div class="flex flex-col items-center gap-4">
-	<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Joystick Control</span>
+	<div class="flex items-center justify-between w-full">
+		<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Joystick Control</span>
+		<label class="flex items-center gap-2 cursor-pointer select-none">
+			<input 
+				type="checkbox" 
+				bind:checked={keyboardEnabled} 
+				class="w-3 h-3 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+			/>
+			<span class="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Keyboard (WASD)</span>
+		</label>
+	</div>
 	<div
 		bind:this={container}
 		role="application"

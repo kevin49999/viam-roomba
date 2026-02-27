@@ -18,7 +18,7 @@
 	const moveStraightMutation = createResourceMutation(baseClient, 'moveStraight');
 	const setVelocityMutation = createResourceMutation(baseClient, 'setVelocity');
 
-	const automaticModeQuery = createResourceQuery(baseClient, 'doCommand', () => [{ command: 'get_automatic_mode' }], () => ({
+	const automaticModeQuery = createResourceQuery(baseClient, 'doCommand', () => [{ command: 'get_automatic_mode' }] as [Record<string, any>], () => ({
 		refetchInterval: 5000
 	}));
 

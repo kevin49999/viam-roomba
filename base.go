@@ -86,6 +86,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 
 	conn, err := acquireConn(conf.SerialPort)
 	if err != nil {
+		logger.Infof("NewBase: failed to acquire connection on %s: %v", conf.SerialPort, err)
 		cancelFunc()
 		return nil, err
 	}
@@ -96,6 +97,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 	// mode the user intentionally set (e.g. Passive for charging).
 	conn.mu.Lock()
 	modeData, modeErr := conn.roomba.Sensors(35)
+	logger.Infof("NewBase: initial OI mode sensor read, data=%v, err=%v", modeData, modeErr)
 	if modeErr != nil || len(modeData) == 0 || modeData[0] == 0 {
 		// OI is off (or unreadable) — send Safe to start it up.
 		if err := conn.roomba.Safe(); err != nil {
@@ -104,6 +106,9 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 			releaseConn(conf.SerialPort, logger)
 			return nil, fmt.Errorf("failed to enter Safe mode: %w", err)
 		}
+		logger.Infof("NewBase: sent Safe() command on startup")
+	} else {
+		logger.Infof("NewBase: leaving existing OI mode as-is (mode=%d)", modeData[0])
 	}
 	conn.mu.Unlock()
 
@@ -148,13 +153,9 @@ func (s *viamRoombaBase) Name() resource.Name {
 func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPerSec float64, extra map[string]any) error {
 	ctx, done := s.opMgr.New(ctx)
 	defer done()
-	//read the distance to reset the distance
-	_, err := s.readDistance()
-	if err != nil {
-		return fmt.Errorf("failed to read distance: %w", err)
-	}
 
 	if distanceMm == 0 || mmPerSec == 0 {
+		s.logger.Infof("MoveStraight: received zero distance or speed (distance=%d, speed=%.2f), stopping instead", distanceMm, mmPerSec)
 		return s.Stop(ctx, extra)
 	}
 
@@ -172,6 +173,8 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 	} else if velocity < -500 {
 		velocity = -500
 	}
+
+	s.logger.Infof("MoveStraight: starting move (distance=%d mm, requested_speed=%.2f mm/sec, clamped_velocity=%d)", distanceMm, mmPerSec, velocity)
 
 	s.conn.mu.Lock()
 	if err := s.conn.roomba.Full(); err != nil {
@@ -198,19 +201,14 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 
 		s.logger.Infof("Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
 	case <-ctx.Done():
+		s.logger.Infof("MoveStraight: context cancelled, stopping move: %v", ctx.Err())
 		s.Stop(ctx, extra)
 		return ctx.Err()
 	case <-s.cancelCtx.Done():
+		s.logger.Infof("MoveStraight: base cancelCtx triggered, stopping move: %v", s.cancelCtx.Err())
 		s.Stop(ctx, extra)
 		return s.cancelCtx.Err()
 	}
-
-	//read the distance again to get the actual distance
-	distance, err := s.readDistance()
-	if err != nil {
-		return fmt.Errorf("failed to read distance: %w", err)
-	}
-	s.logger.Debugf("MoveStraight: actual distance=%.2f mm requested distance=%.2f mm", distance, distanceMm)
 
 	return s.Stop(ctx, extra)
 }
@@ -222,13 +220,9 @@ func (s *viamRoombaBase) MoveStraight(ctx context.Context, distanceMm int, mmPer
 func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec float64, extra map[string]any) error {
 	ctx, done := s.opMgr.New(ctx)
 	defer done()
-	//read to reset the angle
-	_, err := s.readAngle()
-	if err != nil {
-		return fmt.Errorf("failed to read angle: %w", err)
-	}
 
 	if angleDeg == 0 || degsPerSec == 0 {
+		s.logger.Infof("Spin: received zero angle or speed (angle=%.2f, speed=%.2f), stopping instead", angleDeg, degsPerSec)
 		return s.Stop(ctx, extra)
 	}
 
@@ -254,6 +248,9 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 
 	duration := math.Abs(angleDeg / degsPerSec)
 
+	s.logger.Infof("Spin: starting spin (angle=%.2f deg, speed=%.2f deg/sec, wheelbase=%.2f mm, computed_velocity=%d, radius=%d, duration=%.2f sec)",
+		angleDeg, degsPerSec, wheelbaseMM, velocity, radius, duration)
+
 	s.conn.mu.Lock()
 	if err := s.conn.roomba.Full(); err != nil {
 		s.conn.mu.Unlock()
@@ -273,21 +270,16 @@ func (s *viamRoombaBase) Spin(ctx context.Context, angleDeg float64, degsPerSec 
 	select {
 	case <-sleepCtx.Done():
 		s.bearing_deg += angleDeg
-		s.logger.Infof("Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
+		s.logger.Infof("Spin complete. Roomba Position: x=%.2f mm, y=%.2f mm, bearing=%.2f deg", s.pos_x_mm, s.pos_y_mm, s.bearing_deg)
 	case <-ctx.Done():
+		s.logger.Infof("Spin: context cancelled, stopping spin: %v", ctx.Err())
 		s.Stop(ctx, extra)
 		return ctx.Err()
 	case <-s.cancelCtx.Done():
+		s.logger.Infof("Spin: base cancelCtx triggered, stopping spin: %v", s.cancelCtx.Err())
 		s.Stop(ctx, extra)
 		return s.cancelCtx.Err()
 	}
-
-	//read the angle again to get the actual angle
-	angle, err := s.readAngle()
-	if err != nil {
-		return fmt.Errorf("failed to read angle: %w", err)
-	}
-	s.logger.Debugf("Spin: actual angle=%.2f deg requested angle=%.2f deg", angle, angleDeg)
 
 	return s.Stop(ctx, extra)
 }
@@ -313,6 +305,7 @@ func (s *viamRoombaBase) SetVelocity(ctx context.Context, linear r3.Vector, angu
 	defer s.conn.mu.Unlock()
 
 	if linear.Y == 0 && angular.Z == 0 {
+		s.logger.Infof("SetVelocity: zero linear and angular input, calling Stop()")
 		return s.conn.roomba.Stop()
 	}
 
@@ -356,7 +349,8 @@ func (s *viamRoombaBase) SetVelocity(ctx context.Context, linear r3.Vector, angu
 		return fmt.Errorf("failed to drive Roomba: %w", err)
 	}
 
-	s.logger.Debugf("SetVelocity: velocity=%d mm/sec, radius=%d mm", velocity, radius)
+	s.logger.Infof("SetVelocity: linear_input=%.2f, angular_input=%.2f, velocity=%d mm/sec, radius=%d mm",
+		linear.Y, angular.Z, velocity, radius)
 	return nil
 }
 
@@ -368,7 +362,7 @@ func (s *viamRoombaBase) Stop(ctx context.Context, extra map[string]any) error {
 		return fmt.Errorf("failed to stop Roomba: %w", err)
 	}
 
-	s.logger.Debug("Roomba stopped")
+	s.logger.Info("Roomba stopped via Stop()")
 	return nil
 }
 
@@ -376,8 +370,11 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 	s.conn.mu.Lock()
 	defer s.conn.mu.Unlock()
 
+	s.logger.Infof("DoCommand called with payload: %#v", cmd)
+
 	cmdName, ok := cmd["command"].(string)
 	if !ok {
+		s.logger.Infof("DoCommand: invalid command payload (missing or non-string 'command' field)")
 		return nil, fmt.Errorf("command must be a string")
 	}
 
@@ -421,31 +418,37 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		if err := s.conn.roomba.Stop(); err != nil {
 			return nil, fmt.Errorf("failed to stop: %w", err)
 		}
+		s.logger.Info("DoCommand: stop issued")
 		return map[string]any{"status": "stopped"}, nil
 	case "start":
 		if err := s.conn.roomba.Start(); err != nil {
 			return nil, fmt.Errorf("failed to start: %w", err)
 		}
+		s.logger.Info("DoCommand: start issued")
 		return map[string]any{"status": "started"}, nil
 	case "reset_position":
 		s.pos_x_mm = 0
 		s.pos_y_mm = 0
 		s.bearing_deg = 0
+		s.logger.Info("Position reset")
 		return map[string]any{"status": "position_reset"}, nil
 
 	case "move_straight":
 		distanceMm, ok := cmd["distance_mm"].(float64)
 		if !ok {
+			s.logger.Infof("DoCommand move_straight: invalid or missing 'distance_mm' (value=%v)", cmd["distance_mm"])
 			return nil, fmt.Errorf("distance_mm must be a number")
 		}
 		mmPerSec, ok := cmd["mm_per_sec"].(float64)
 		if !ok {
+			s.logger.Infof("DoCommand move_straight: invalid or missing 'mm_per_sec' (value=%v)", cmd["mm_per_sec"])
 			return nil, fmt.Errorf("mm_per_sec must be a number")
 		}
 		// MoveStraight is blocking, but DoCommand should usually be non-blocking or at least return after starting if possible.
 		// However, the MoveStraight method in this implementation IS blocking.
 		// If we want it to be non-blocking in DoCommand, we might want to run it in a goroutine.
 		// But for now, let's keep it consistent with the existing implementation.
+		s.logger.Infof("DoCommand move_straight: starting MoveStraight(distance=%d, speed=%.2f)", int(distanceMm), mmPerSec)
 		go func() {
 			if err := s.MoveStraight(ctx, int(distanceMm), mmPerSec, nil); err != nil {
 				s.logger.Errorf("MoveStraight failed in DoCommand: %v", err)
@@ -454,6 +457,7 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		return map[string]any{"status": "move_straight_started"}, nil
 
 	default:
+		s.logger.Infof("DoCommand: unknown command '%s'", cmdName)
 		return nil, fmt.Errorf("unknown command: %s", cmdName)
 	}
 }
@@ -465,16 +469,18 @@ func (s *viamRoombaBase) IsMoving(ctx context.Context) (bool, error) {
 	// Packet 39: last requested velocity (0 after Stop(), non-zero while driving)
 	data, err := s.conn.roomba.Sensors(39)
 	if err != nil {
+		s.logger.Infof("IsMoving: failed to read requested velocity sensor (packet 39): %v", err)
 		return false, fmt.Errorf("failed to read requested velocity: %w", err)
 	}
 	if len(data) < 2 {
+		s.logger.Infof("IsMoving: invalid sensor data length for packet 39 (len=%d)", len(data))
 		return false, fmt.Errorf("invalid sensor data length")
 	}
 
 	requestedVelocity := int16(binary.BigEndian.Uint16(data))
 	isMoving := math.Abs(float64(requestedVelocity)) > 5
 
-	s.logger.Debugf("IsMoving: requested_velocity=%d mm/s, moving=%v", requestedVelocity, isMoving)
+	s.logger.Infof("IsMoving: requested_velocity=%d mm/s, moving=%v", requestedVelocity, isMoving)
 	return isMoving, nil
 }
 
@@ -487,13 +493,17 @@ func (s *viamRoombaBase) readAngle() (int16, error) {
 	s.conn.flushRx()
 	data, err := s.conn.roomba.Sensors(20)
 	if err != nil {
+		s.logger.Infof("readAngle: sensor read failed: %v", err)
 		return 0, err
 	}
 	if len(data) < 2 {
+		s.logger.Infof("readAngle: unexpected sensor data length: %d", len(data))
 		return 0, errors.New("unexpected sensor data length")
 	}
 
-	return int16(binary.BigEndian.Uint16(data)), nil
+	angle := int16(binary.BigEndian.Uint16(data))
+	s.logger.Infof("readAngle: raw_angle=%d deg (since last read)", angle)
+	return angle, nil
 }
 
 func (s *viamRoombaBase) readDistance() (int16, error) {
@@ -503,13 +513,17 @@ func (s *viamRoombaBase) readDistance() (int16, error) {
 	s.conn.flushRx()
 	data, err := s.conn.roomba.Sensors(19)
 	if err != nil {
+		s.logger.Infof("readDistance: sensor read failed: %v", err)
 		return 0, err
 	}
 	if len(data) < 2 {
+		s.logger.Infof("readDistance: unexpected sensor data length: %d", len(data))
 		return 0, errors.New("unexpected sensor data length")
 	}
 
-	return int16(binary.BigEndian.Uint16(data)), nil
+	dist := int16(binary.BigEndian.Uint16(data))
+	s.logger.Infof("readDistance: raw_distance=%d mm (since last read)", dist)
+	return dist, nil
 }
 
 // Properties returns the width, turning radius, and wheel circumference of the physical base in meters.

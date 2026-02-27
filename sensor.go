@@ -109,9 +109,11 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	s.conn.flushRx()
 	data, err := s.conn.roomba.QueryList(sensorPackets)
 	if err != nil {
+		s.logger.Infof("Sensor.Readings: QueryList failed: %v", err)
 		return nil, fmt.Errorf("failed to query sensors: %w", err)
 	}
 	if len(data) != len(sensorPackets) {
+		s.logger.Infof("Sensor.Readings: unexpected sensor data count: got %d, want %d", len(data), len(sensorPackets))
 		return nil, fmt.Errorf("unexpected sensor data count: got %d, want %d", len(data), len(sensorPackets))
 	}
 
@@ -120,6 +122,8 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 	u16 := func(idx int) uint16 { return binary.BigEndian.Uint16(data[idx]) }
 
 	readings := map[string]any{}
+
+	s.logger.Infof("Sensor.Readings: successfully read %d packets from Roomba", len(data))
 
 	// Packet 7: Bumps and Wheel Drops
 	bumps := b(0)
@@ -170,18 +174,22 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 		readings["charging_state"] = chargingStates[chargingIdx]
 	} else {
 		readings["charging_state"] = "unknown"
+		s.logger.Infof("Sensor.Readings: unknown charging_state index=%d", chargingIdx)
 	}
 
 	// Packets 22-26: Battery
 	readings["voltage_mv"] = int(u16(12))
 	readings["current_ma"] = int(i16(13))
-	readings["temperature_c"] = int(int8(b(14)))
+	tempC := int(int8(b(14)))
+	readings["temperature_c"] = tempC
 	charge := int(u16(15))
 	capacity := int(u16(16))
 	readings["battery_charge_mah"] = charge
 	readings["battery_capacity_mah"] = capacity
 	if capacity > 0 {
 		readings["battery_percent"] = float64(charge) / float64(capacity) * 100.0
+	} else {
+		s.logger.Infof("Sensor.Readings: battery capacity reported as 0 (charge=%d)", charge)
 	}
 
 	// Packets 27-31: Signal strengths
@@ -202,14 +210,21 @@ func (s *viamRoombaSensor) Readings(ctx context.Context, extra map[string]any) (
 		readings["oi_mode"] = oiModes[modeIdx]
 	} else {
 		readings["oi_mode"] = "unknown"
+		s.logger.Infof("Sensor.Readings: unknown oi_mode index=%d", modeIdx)
 	}
 
 	// Packets 39-40: Requested motion
-	readings["requested_velocity_mms"] = int(i16(24))
-	readings["requested_radius_mm"] = int(i16(25))
+	reqVel := int(i16(24))
+	reqRadius := int(i16(25))
+	readings["requested_velocity_mms"] = reqVel
+	readings["requested_radius_mm"] = reqRadius
 
 	// Packet 58: Stasis
-	readings["stasis"] = uint8(b(28))
+	stasis := uint8(b(28))
+	readings["stasis"] = stasis
+
+	s.logger.Infof("Sensor.Readings summary: charging_state=%v, oi_mode=%v, battery_percent=%v, requested_velocity=%d, requested_radius=%d, temperature_c=%d, stasis=%d",
+		readings["charging_state"], readings["oi_mode"], readings["battery_percent"], reqVel, reqRadius, tempC, stasis)
 
 	return readings, nil
 }

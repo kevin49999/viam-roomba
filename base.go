@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"time"
 
 	"github.com/golang/geo/r3"
@@ -679,7 +680,7 @@ func (s *viamRoombaBase) choose_direction() float64 {
 
 	// get direction to average position
 	direction := math.Atan2(average_y-s.pos_y_mm, average_x-s.pos_x_mm) * 180.0 / math.Pi
-	return direction + 180.0
+	return direction + 180.0 + rand.Float64()*90.0 - 45.0
 }
 
 func (s *viamRoombaBase) add_obstacle_position(distance_in_front_of_roomba_mm float64) {

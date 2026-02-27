@@ -489,13 +489,6 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		}
 		return map[string]any{"status": "song_played"}, nil
 	case "toggle_automatic_mode":
-		s.in_automatic_mode = !s.in_automatic_mode
-		return map[string]any{"status": "automatic_mode_toggled", "in_automatic_mode": s.in_automatic_mode}, nil
-	case "get_automatic_mode":
-		//  TODO: maybe should rethink what component and this logic should be in? Top level roomba brain service??
-		return map[string]any{"in_automatic_mode": s.in_automatic_mode}, nil
-
-	case "toggle_automatic_mode":
 		s.automaticMode = !s.automaticMode
 		s.logger.Infof("Automatic mode toggled to %v", s.automaticMode)
 		return map[string]any{"automatic_mode": s.automaticMode}, nil

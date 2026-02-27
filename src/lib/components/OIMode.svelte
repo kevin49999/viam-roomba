@@ -14,7 +14,15 @@
 	}
 
 	const { query } = readingsContext;
-	const { doCommandMutation } = baseContext;
+	const { doCommandMutation, automaticModeQuery } = baseContext;
+
+	const isAutomatic = $derived.by(() => {
+		const data = automaticModeQuery.data;
+		if (data && typeof data === 'object' && !Array.isArray(data)) {
+			return (data as Record<string, unknown>)['automatic_mode'] === true;
+		}
+		return false;
+	});
 
 	/** Current OI mode from readings: 'off', 'passive', 'safe', or 'full' */
 	const currentMode = $derived.by(() => {
@@ -39,7 +47,7 @@
 		<button
 			type="button"
 			onclick={() => setMode(command)}
-			disabled={doCommandMutation.isPending}
+			disabled={doCommandMutation.isPending || isAutomatic}
 			class="relative flex items-center justify-center rounded-md px-4 py-1.5 text-sm font-medium transition-all duration-200
 				{currentMode === id 
 					? 'bg-white text-blue-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-700 dark:text-blue-400 dark:ring-slate-600' 

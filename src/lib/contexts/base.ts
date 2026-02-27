@@ -1,4 +1,4 @@
-import type { CreateMutationResult } from '@tanstack/svelte-query';
+import type { CreateMutationResult, QueryObserverResult } from '@tanstack/svelte-query';
 import type { JsonValue, Vector3 } from '@viamrobotics/sdk';
 
 /**
@@ -24,6 +24,11 @@ export interface BaseContextValue {
 	setMaxLinearSpeed: (speed: number) => void;
 	/** Setter for maxAngularSpeed */
 	setMaxAngularSpeed: (speed: number) => void;
+
+	/** Query for current automatic mode state */
+	automaticModeQuery: QueryObserverResult<JsonValue, Error>;
+	/** Toggle automatic mode */
+	toggleAutomaticMode: () => void;
 }
 
 export const BASE_CONTEXT_KEY = Symbol('base');

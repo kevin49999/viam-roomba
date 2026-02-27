@@ -7,7 +7,15 @@
 		throw new Error('BaseCommands must be used inside BaseProvider');
 	}
 
-	const { doCommandMutation, spinMutation, moveStraightMutation, maxLinearSpeed, maxAngularSpeed, setMaxLinearSpeed, setMaxAngularSpeed } = baseContext;
+	const { doCommandMutation, spinMutation, moveStraightMutation, maxLinearSpeed, maxAngularSpeed, setMaxLinearSpeed, setMaxAngularSpeed, automaticModeQuery } = baseContext;
+
+	const isAutomatic = $derived.by(() => {
+		const data = automaticModeQuery.data;
+		if (data && typeof data === 'object' && !Array.isArray(data)) {
+			return (data as Record<string, unknown>)['automatic_mode'] === true;
+		}
+		return false;
+	});
 
 	let angleDeg = $state(90);
 	let degsPerSec = $state(45);
@@ -41,6 +49,15 @@
 	function resetPosition() {
 		doCommandMutation.mutate([{ command: 'reset_position' }]);
 	}
+
+	async function playSong() {
+		try {
+			await doCommandMutation.mutateAsync([{ command: 'add_song' }]);
+			await doCommandMutation.mutateAsync([{ command: 'play_song' }]);
+		} catch (error) {
+			console.error('Failed to play song:', error);
+		}
+	}
 </script>
 
 <div class="flex flex-col gap-4">
@@ -48,7 +65,7 @@
 		<button
 			type="button"
 			onclick={start}
-			disabled={doCommandMutation.isPending}
+			disabled={doCommandMutation.isPending || isAutomatic}
 			class="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-blue-500 disabled:opacity-50 disabled:pointer-events-none"
 		>
 			Start
@@ -57,7 +74,7 @@
 		<button
 			type="button"
 			onclick={clean}
-			disabled={doCommandMutation.isPending}
+			disabled={doCommandMutation.isPending || isAutomatic}
 			class="rounded-lg bg-emerald-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-50 disabled:pointer-events-none"
 		>
 			Clean
@@ -66,7 +83,7 @@
 		<button
 			type="button"
 			onclick={stop}
-			disabled={doCommandMutation.isPending}
+			disabled={doCommandMutation.isPending || isAutomatic}
 			class="rounded-lg bg-red-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-red-500 disabled:opacity-50 disabled:pointer-events-none"
 		>
 			Stop
@@ -75,7 +92,7 @@
 		<button
 			type="button"
 			onclick={seekDock}
-			disabled={doCommandMutation.isPending}
+			disabled={doCommandMutation.isPending || isAutomatic}
 			class="rounded-lg bg-slate-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-slate-500 disabled:opacity-50 disabled:pointer-events-none"
 		>
 			Seek Dock
@@ -84,10 +101,19 @@
 		<button
 			type="button"
 			onclick={resetPosition}
-			disabled={doCommandMutation.isPending}
+			disabled={doCommandMutation.isPending || isAutomatic}
 			class="rounded-lg bg-slate-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-slate-500 disabled:opacity-50 disabled:pointer-events-none"
 		>
 			Reset Position
+		</button>
+
+		<button
+			type="button"
+			onclick={playSong}
+			disabled={doCommandMutation.isPending || isAutomatic}
+			class="rounded-lg bg-purple-600 px-4 py-2 font-medium text-white shadow-sm transition hover:bg-purple-500 disabled:opacity-50 disabled:pointer-events-none"
+		>
+			Play Song
 		</button>
 		{#if doCommandMutation.isError}
 			<p class="text-sm text-red-600 dark:text-red-400">{doCommandMutation.error?.message}</p>
@@ -106,7 +132,8 @@
 				onchange={(e) => setMaxLinearSpeed(Number((e.target as HTMLInputElement).value))}
 				min="0"
 				max="500"
-				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+				disabled={isAutomatic}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-50"
 			/>
 		</div>
 
@@ -121,7 +148,8 @@
 				onchange={(e) => setMaxAngularSpeed(Number((e.target as HTMLInputElement).value))}
 				min="0"
 				max="180"
-				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+				disabled={isAutomatic}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-50"
 			/>
 		</div>
 		<span class="text-[10px] text-slate-400 italic mb-1.5 self-end">Sets joystick sensitivity</span>
@@ -136,7 +164,8 @@
 				id="angle-deg"
 				type="number"
 				bind:value={angleDeg}
-				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+				disabled={isAutomatic}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-50"
 			/>
 		</div>
 
@@ -150,14 +179,15 @@
 				bind:value={degsPerSec}
 				max={maxAngularSpeed}
 				min="0"
-				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+				disabled={isAutomatic}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-50"
 			/>
 		</div>
 
 		<button
 			type="button"
 			onclick={spin}
-			disabled={spinMutation.isPending}
+			disabled={spinMutation.isPending || isAutomatic}
 			class="rounded bg-slate-800 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
 		>
 			Spin
@@ -177,7 +207,8 @@
 				id="distance-mm"
 				type="number"
 				bind:value={distanceMm}
-				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+				disabled={isAutomatic}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-50"
 			/>
 		</div>
 
@@ -191,14 +222,15 @@
 				bind:value={mmPerSec}
 				max={maxLinearSpeed}
 				min="0"
-				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900"
+				disabled={isAutomatic}
+				class="w-24 rounded border border-slate-300 bg-white px-2 py-1 text-sm dark:border-slate-700 dark:bg-slate-900 disabled:opacity-50"
 			/>
 		</div>
 
 		<button
 			type="button"
 			onclick={moveStraight}
-			disabled={moveStraightMutation.isPending}
+			disabled={moveStraightMutation.isPending || isAutomatic}
 			class="rounded bg-slate-800 px-4 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
 		>
 			Move Straight

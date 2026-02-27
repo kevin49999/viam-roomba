@@ -16,6 +16,14 @@ export interface BaseContextValue {
 	moveStraightMutation: CreateMutationResult<void, Error, [distanceMm: number, mmPerSec: number], unknown>;
 	/** Mutation to send setVelocity to the base. Call with [linear, angular] or [linear, angular, extra, callOptions] */
 	setVelocityMutation: CreateMutationResult<void, Error, [linear: Vector3, angular: Vector3], unknown>;
+	/** Maximum linear speed in mm/s */
+	maxLinearSpeed: number;
+	/** Maximum angular speed in deg/s */
+	maxAngularSpeed: number;
+	/** Setter for maxLinearSpeed */
+	setMaxLinearSpeed: (speed: number) => void;
+	/** Setter for maxAngularSpeed */
+	setMaxAngularSpeed: (speed: number) => void;
 }
 
 export const BASE_CONTEXT_KEY = Symbol('base');

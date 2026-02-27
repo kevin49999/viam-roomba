@@ -62,6 +62,11 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 	return []string{cfg.RoombaSensor, cfg.UltrasonicSensor}, nil, nil
 }
 
+type ObstaclePosition struct {
+	x_mm float64
+	y_mm float64
+}
+
 type viamRoombaBase struct {
 	resource.AlwaysRebuild
 
@@ -83,7 +88,8 @@ type viamRoombaBase struct {
 	bearing_deg       float64
 	in_automatic_mode bool
 
-	automaticMode bool
+	automaticMode     bool
+	obstaclePositions []ObstaclePosition
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -158,6 +164,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		ultrasonicSensor:     ultrasonicSensor,
 		widthMM:              widthMM,
 		wheelCircumferenceMM: wheelCircumferenceMM,
+		obstaclePositions:    []ObstaclePosition{},
 		opMgr:                operation.NewSingleOperationManager(),
 		pos_x_mm:             0,
 		pos_y_mm:             0,
@@ -659,6 +666,13 @@ func choose_direction() float64 {
 	} else {
 		return -90.0
 	}
+}
+
+func (s *viamRoombaBase) add_obstacle_position(distance_in_front_of_roomba_mm float64) {
+	obstacle_x := s.pos_x_mm + distance_in_front_of_roomba_mm*math.Cos(s.bearing_deg*math.Pi/180.0)
+	obstacle_y := s.pos_y_mm + distance_in_front_of_roomba_mm*math.Sin(s.bearing_deg*math.Pi/180.0)
+	s.logger.Infof("add_obstacle_position: obstacle_x=%f mm, obstacle_y=%f mm", obstacle_x, obstacle_y)
+	s.obstaclePositions = append(s.obstaclePositions, ObstaclePosition{x_mm: obstacle_x, y_mm: obstacle_y})
 }
 
 // WARNING: very messy code below

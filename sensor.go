@@ -10,7 +10,7 @@ import (
 	"go.viam.com/rdk/resource"
 )
 
-var Sensor = resource.NewModel("jalen", "viam-roomba", "sensor")
+var Sensor = resource.NewModel("dan", "viam-roomba", "sensor")
 
 func init() {
 	resource.RegisterComponent(sensor.API, Sensor,

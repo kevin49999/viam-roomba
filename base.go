@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	Base             = resource.NewModel("jalen", "viam-roomba", "base")
+	Base             = resource.NewModel("dan", "viam-roomba", "base")
 	errUnimplemented = errors.New("unimplemented")
 )
 

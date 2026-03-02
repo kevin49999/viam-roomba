@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	Brain = resource.NewModel("jalen", "viam-roomba", "brain")
+	Brain = resource.NewModel("dan", "viam-roomba", "brain")
 )
 
 func init() {

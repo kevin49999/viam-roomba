@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/rand/v2"
+	"math/rand"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang/geo/r3"
@@ -83,13 +85,11 @@ type viamRoombaBase struct {
 	wheelCircumferenceMM int
 
 	opMgr             *operation.SingleOperationManager
+	obstaclePositions []ObstaclePosition
 	pos_x_mm          float64
 	pos_y_mm          float64
 	bearing_deg       float64
-	in_automatic_mode bool
-
-	automaticMode     bool
-	obstaclePositions []ObstaclePosition
+	in_automatic_mode atomic.Bool
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -169,7 +169,7 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		pos_x_mm:             0,
 		pos_y_mm:             0,
 		bearing_deg:          0,
-		in_automatic_mode:    false,
+		in_automatic_mode:    atomic.Bool{},
 		cancelCtx:            cancelCtx,
 		cancelFunc:           cancelFunc,
 	}
@@ -338,7 +338,7 @@ func (s *viamRoombaBase) SetPower(ctx context.Context, linear r3.Vector, angular
 // linear is in mmPerSec (positive Y moves forwards for built-in RDK drivers).
 // angular is in degsPerSec (positive Z turns to the left for built-in RDK drivers).
 func (s *viamRoombaBase) SetVelocity(ctx context.Context, linear r3.Vector, angular r3.Vector, extra map[string]any) error {
-	if s.in_automatic_mode {
+	if s.in_automatic_mode.Load() {
 		return fmt.Errorf("automatic mode is enabled, SetVelocity is not allowed")
 	}
 	s.conn.mu.Lock()
@@ -407,8 +407,8 @@ func (s *viamRoombaBase) Stop(ctx context.Context, extra map[string]any) error {
 }
 
 func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
-	if s.in_automatic_mode && cmd["command"] != "toggle_automatic_mode" {
-		return nil, fmt.Errorf("automatic mode is enabled, only toggle_automatic_mode command is allowed")
+	if s.in_automatic_mode.Load() && !strings.Contains(cmd["command"].(string), "automatic_mode") {
+		return nil, fmt.Errorf("automatic mode is enabled, only *_automatic_mode commands are allowed")
 	}
 	s.conn.mu.Lock()
 	defer s.conn.mu.Unlock()
@@ -544,17 +544,22 @@ func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map
 		}
 		return map[string]any{"status": "vader_song_played"}, nil
 	case "toggle_automatic_mode":
-		s.automaticMode = !s.automaticMode
-		s.logger.Infof("Automatic mode toggled to %v", s.automaticMode)
-		if s.automaticMode {
+		for {
+			prev := s.in_automatic_mode.Load()
+			if s.in_automatic_mode.CompareAndSwap(prev, !prev) {
+				break
+			}
+		}
+		s.logger.Infof("Automatic mode toggled to %v", s.in_automatic_mode.Load())
+		if s.in_automatic_mode.Load() {
 			go s.start_automatic_mode()
 		} else {
 			s.logger.Infof("Automatic mode stopped")
 		}
-		return map[string]any{"automatic_mode": s.automaticMode}, nil
+		return map[string]any{"automatic_mode": s.in_automatic_mode.Load()}, nil
 
 	case "get_automatic_mode":
-		return map[string]any{"automatic_mode": s.automaticMode}, nil
+		return map[string]any{"automatic_mode": s.in_automatic_mode.Load()}, nil
 
 	default:
 		s.logger.Infof("DoCommand: unknown command '%s'", cmdName)
@@ -697,16 +702,15 @@ func (s *viamRoombaBase) add_obstacle_position(distance_in_front_of_roomba_mm fl
 func (s *viamRoombaBase) start_automatic_mode() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	s.pos_x_mm = 0
+	s.pos_y_mm = 0
+	s.bearing_deg = 0
+	s.obstaclePositions = []ObstaclePosition{}
 	s.conn.roomba.Write(0x8D, []byte{0x01})
 	s.logger.Info("start_automatic_mode: entered")
-	if s.in_automatic_mode {
-		s.logger.Info("start_automatic_mode: already in automatic mode, exiting")
-		return nil
-	}
-	s.in_automatic_mode = true
 	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
 	// NOTE: TO EXIT AUTO MODE WE HAVE TO RESTART THE MODULE ( there was a weird bug where it would reconfigure and then automatic mode would stop)
-	for s.in_automatic_mode {
+	for s.in_automatic_mode.Load() {
 		s.logger.Info("start_automatic_mode: loop iteration starting")
 		// move forward a bit
 		distanceMm := 500
@@ -742,6 +746,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		cliff_right := readings["cliff_right"].(bool)
 
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
+			s.add_obstacle_position(10)
 			//  TODO: place obstacles in a world service here
 			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
 				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
@@ -790,6 +795,7 @@ func (s *viamRoombaBase) start_automatic_mode() error {
 		ultrasonic_distance_m := ultrasonic_readings["distance"].(float64)
 		s.logger.Infof("start_automatic_mode: ultrasonic_distance=%f m", ultrasonic_distance_m)
 		if ultrasonic_distance_m < 0.75 {
+			s.add_obstacle_position(ultrasonic_distance_m * 1000.0)
 			s.logger.Infof("start_automatic_mode: ultrasonic_distance is too close, turning away")
 			// go backwards
 			distanceMm := -500

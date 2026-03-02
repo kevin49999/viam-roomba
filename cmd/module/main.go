@@ -9,6 +9,7 @@ import (
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"
+	generic "go.viam.com/rdk/services/generic"
 )
 
 func main() {
@@ -20,5 +21,6 @@ func main() {
 	module.ModularMain(
 		resource.APIModel{API: base.API, Model: viamroomba.Base},
 		resource.APIModel{API: sensor.API, Model: viamroomba.Sensor},
+		resource.APIModel{API: generic.API, Model: viamroomba.Brain},
 	)
 }

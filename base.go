@@ -13,7 +13,6 @@ import (
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/operation"
 	"go.viam.com/rdk/resource"
-	generic "go.viam.com/rdk/services/generic"
 	"go.viam.com/rdk/spatialmath"
 )
 
@@ -34,7 +33,6 @@ type Config struct {
 	SerialPort           string `json:"serial_port"`
 	WidthMM              int    `json:"width_mm,omitempty"`
 	WheelCircumferenceMM int    `json:"wheel_circumference_mm,omitempty"`
-	BrainService         string `json:"brain_service,omitempty"`
 }
 
 func (cfg *Config) Validate(path string) ([]string, []string, error) {
@@ -49,12 +47,7 @@ func (cfg *Config) Validate(path string) ([]string, []string, error) {
 		return nil, nil, fmt.Errorf("%s: wheel_circumference_mm must be a positive number", path)
 	}
 
-	var optional []string
-	if cfg.BrainService != "" {
-		optional = append(optional, cfg.BrainService)
-	}
-
-	return nil, optional, nil
+	return nil, nil, nil
 }
 
 type viamRoombaBase struct {
@@ -66,7 +59,6 @@ type viamRoombaBase struct {
 
 	conn       *roombaConn
 	serialPort string
-	brain      *brainBrain
 
 	widthMM              int
 	wheelCircumferenceMM int
@@ -143,18 +135,6 @@ func NewBase(ctx context.Context, deps resource.Dependencies, name resource.Name
 		bearing_deg:          0,
 		cancelCtx:            cancelCtx,
 		cancelFunc:           cancelFunc,
-	}
-
-	// Optionally wire up the brain service if configured.
-	if conf.BrainService != "" {
-		if brainRes, ok := deps[generic.Named(conf.BrainService)]; ok {
-			if b, ok := brainRes.(*brainBrain); ok {
-				s.brain = b
-				logger.Infof("NewBase: wired up brain service %q", conf.BrainService)
-			}
-		} else {
-			logger.Infof("NewBase: brain service %q not available yet", conf.BrainService)
-		}
 	}
 
 	logger.Infof("Roomba base initialized on %s (width: %dmm, wheel circumference: %dmm)",
@@ -321,9 +301,6 @@ func (s *viamRoombaBase) SetPower(ctx context.Context, linear r3.Vector, angular
 // linear is in mmPerSec (positive Y moves forwards for built-in RDK drivers).
 // angular is in degsPerSec (positive Z turns to the left for built-in RDK drivers).
 func (s *viamRoombaBase) SetVelocity(ctx context.Context, linear r3.Vector, angular r3.Vector, extra map[string]any) error {
-	if s.brain != nil && s.brain.IsInAutomaticMode() {
-		return fmt.Errorf("automatic mode is enabled, SetVelocity is not allowed")
-	}
 	s.conn.mu.Lock()
 	defer s.conn.mu.Unlock()
 
@@ -390,156 +367,7 @@ func (s *viamRoombaBase) Stop(ctx context.Context, extra map[string]any) error {
 }
 
 func (s *viamRoombaBase) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
-	s.logger.Infof("DoCommand called with payload: %#v", cmd)
-
-	cmdName, ok := cmd["command"].(string)
-	if !ok {
-		s.logger.Infof("DoCommand: invalid command payload (missing or non-string 'command' field)")
-		return nil, fmt.Errorf("command must be a string")
-	}
-
-	// Proxy automatic mode commands to the brain service (no conn lock needed).
-	switch cmdName {
-	case "toggle_automatic_mode", "get_automatic_mode":
-		if s.brain == nil {
-			return nil, fmt.Errorf("no brain service configured")
-		}
-		return s.brain.DoCommand(ctx, cmd)
-	}
-
-	if s.brain != nil && s.brain.IsInAutomaticMode() {
-		return nil, fmt.Errorf("automatic mode is enabled, only commands via the brain service are allowed")
-	}
-	s.conn.mu.Lock()
-	defer s.conn.mu.Unlock()
-
-	switch cmdName {
-	case "enter_full_mode":
-		if err := s.conn.roomba.Full(); err != nil {
-			return nil, fmt.Errorf("failed to enter Full mode: %w", err)
-		}
-		s.logger.Info("Entered Full mode (safety features disabled)")
-		return map[string]any{"status": "full_mode_enabled"}, nil
-
-	case "enter_safe_mode":
-		if err := s.conn.roomba.Safe(); err != nil {
-			return nil, fmt.Errorf("failed to enter Safe mode: %w", err)
-		}
-		s.logger.Info("Entered Safe mode (safety features enabled)")
-		return map[string]any{"status": "safe_mode_enabled"}, nil
-
-	case "enter_passive_mode":
-		if err := s.conn.roomba.Passive(); err != nil {
-			return nil, fmt.Errorf("failed to enter Passive mode: %w", err)
-		}
-		s.logger.Info("Entered Passive mode (charging allowed)")
-		return map[string]any{"status": "passive_mode_enabled"}, nil
-
-	case "seek_dock":
-		if err := s.conn.roomba.SeekDock(); err != nil {
-			return nil, fmt.Errorf("failed to seek dock: %w", err)
-		}
-		s.logger.Info("Seeking charging dock")
-		return map[string]any{"status": "seeking_dock"}, nil
-
-	case "clean":
-		if err := s.conn.roomba.Clean(); err != nil {
-			return nil, fmt.Errorf("failed to start cleaning: %w", err)
-		}
-		s.logger.Info("Started cleaning mode")
-		return map[string]any{"status": "cleaning"}, nil
-
-	case "stop":
-		if err := s.conn.roomba.Stop(); err != nil {
-			return nil, fmt.Errorf("failed to stop: %w", err)
-		}
-		s.logger.Info("DoCommand: stop issued")
-		return map[string]any{"status": "stopped"}, nil
-	case "start":
-		if err := s.conn.roomba.Start(); err != nil {
-			return nil, fmt.Errorf("failed to start: %w", err)
-		}
-		s.logger.Info("DoCommand: start issued")
-		return map[string]any{"status": "started"}, nil
-	case "reset_position":
-		s.pos_x_mm = 0
-		s.pos_y_mm = 0
-		s.bearing_deg = 0
-		s.logger.Info("Position reset")
-		return map[string]any{"status": "position_reset"}, nil
-
-	case "move_straight":
-		distanceMm, ok := cmd["distance_mm"].(float64)
-		if !ok {
-			s.logger.Infof("DoCommand move_straight: invalid or missing 'distance_mm' (value=%v)", cmd["distance_mm"])
-			return nil, fmt.Errorf("distance_mm must be a number")
-		}
-		mmPerSec, ok := cmd["mm_per_sec"].(float64)
-		if !ok {
-			s.logger.Infof("DoCommand move_straight: invalid or missing 'mm_per_sec' (value=%v)", cmd["mm_per_sec"])
-			return nil, fmt.Errorf("mm_per_sec must be a number")
-		}
-		// MoveStraight is blocking, but DoCommand should usually be non-blocking or at least return after starting if possible.
-		// However, the MoveStraight method in this implementation IS blocking.
-		// If we want it to be non-blocking in DoCommand, we might want to run it in a goroutine.
-		// But for now, let's keep it consistent with the existing implementation.
-		s.logger.Infof("DoCommand move_straight: starting MoveStraight(distance=%d, speed=%.2f)", int(distanceMm), mmPerSec)
-		go func() {
-			if err := s.MoveStraight(ctx, int(distanceMm), mmPerSec, nil); err != nil {
-				s.logger.Errorf("MoveStraight failed in DoCommand: %v", err)
-			}
-		}()
-		return map[string]any{"status": "move_straight_started"}, nil
-
-	case "add_song":
-		//lotrBytes = [140][1][16][62][16][60][16][57][16][55][32][53][16][55][16][57][16][62][32][60][16][57][16][55][16][53][32][55][16][57][16][53][16][50][32]
-		lotrBytes := []byte{0x01, 0x10, 0x3E, 0x10, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x20, 0x35, 0x10, 0x37, 0x10, 0x39, 0x10, 0x3E, 0x20, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x10, 0x35, 0x20, 0x37, 0x10, 0x39, 0x10, 0x35, 0x10, 0x32, 0x20}
-		if err := s.conn.roomba.Write(0x8C, lotrBytes); err != nil {
-			return nil, fmt.Errorf("failed to write song: %w", err)
-		}
-		// Write Darth Vader's Theme (Imperial March) under song slot 0.
-		// This is a very compressed version (tune bytes limited to Roomba format).
-		// Song 0, 16 notes, each note: (note, duration). See Roomba docs for midi numbers.
-		vaderBytes := []byte{
-			0x00, 0x10, 0x37, 0x10, // G2
-			0x37, 0x10, // G2
-			0x37, 0x10, // G2
-			0x3C, 0x08, // Eb3
-			0x41, 0x08, // Bb3
-			0x37, 0x10, // G2
-			0x3C, 0x08, // Eb3
-			0x41, 0x08, // Bb3
-			0x37, 0x20, // G2 (long)
-			0x44, 0x10, // D3
-			0x44, 0x10, // D3
-			0x44, 0x10, // D3
-			0x45, 0x08, // Db3
-			0x41, 0x08, // Bb3
-			0x3E, 0x10, // Ab2
-			0x3C, 0x08, // Eb3
-		}
-		// Write the song to Roomba
-		if err := s.conn.roomba.Write(0x8C, vaderBytes); err != nil {
-			return nil, fmt.Errorf("failed to write Vader's theme song: %w", err)
-		}
-		return map[string]any{"status": "song_written"}, nil
-
-	case "play_song":
-		// ser.write(bytes([141, 1]))
-		if err := s.conn.roomba.Write(0x8D, []byte{0x01}); err != nil {
-			return nil, fmt.Errorf("failed to play song: %w", err)
-		}
-		return map[string]any{"status": "song_played"}, nil
-	case "play_vader_song":
-		if err := s.conn.roomba.Write(0x8D, []byte{0x00}); err != nil {
-			return nil, fmt.Errorf("failed to play Vader's theme song: %w", err)
-		}
-		return map[string]any{"status": "vader_song_played"}, nil
-
-	default:
-		s.logger.Infof("DoCommand: unknown command '%s'", cmdName)
-		return nil, fmt.Errorf("unknown command: %s", cmdName)
-	}
+	return nil, fmt.Errorf("all commands have been moved to the brain service")
 }
 
 func (s *viamRoombaBase) IsMoving(ctx context.Context) (bool, error) {

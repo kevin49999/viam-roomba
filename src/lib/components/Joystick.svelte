@@ -7,15 +7,7 @@
 		throw new Error('Joystick must be used inside BaseProvider');
 	}
 
-	const { setVelocityMutation, maxLinearSpeed, maxAngularSpeed, automaticModeQuery } = baseContext;
-
-	const isAutomatic = $derived.by(() => {
-		const data = automaticModeQuery.data;
-		if (data && typeof data === 'object' && !Array.isArray(data)) {
-			return (data as Record<string, unknown>)['automatic_mode'] === true;
-		}
-		return false;
-	});
+	const { setVelocityMutation, maxLinearSpeed, maxAngularSpeed } = baseContext;
 
 	let container: HTMLDivElement;
 	let knob: SVGCircleElement;
@@ -30,16 +22,11 @@
 	let maxDist = radius - knobRadius;
 
 	function handleStart(event: MouseEvent | TouchEvent) {
-		if (isAutomatic) return;
 		isDragging = true;
 		handleMove(event);
 	}
 
 	function handleMove(event: MouseEvent | TouchEvent) {
-		if (isAutomatic) {
-			isDragging = false;
-			return;
-		}
 		if (!isDragging) return;
 
 		const rect = container.getBoundingClientRect();
@@ -69,7 +56,7 @@
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {
-		if (!keyboardEnabled || isAutomatic) return;
+		if (!keyboardEnabled) return;
 		const key = event.key.toLowerCase();
 		if (['w', 'a', 's', 'd'].includes(key)) {
 			// Prevent scrolling with WASD if enabled
@@ -104,7 +91,7 @@
 	}
 
 	$effect(() => {
-		if (!keyboardEnabled || isAutomatic) {
+		if (!keyboardEnabled) {
 			keys.clear();
 			if (x !== 0 || y !== 0) {
 				x = 0;
@@ -170,7 +157,7 @@
 		bind:this={container}
 		role="application"
 		aria-label="Joystick Control"
-		class="relative flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 shadow-inner select-none touch-none {isAutomatic ? 'opacity-50 cursor-not-allowed' : ''}"
+		class="relative flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 shadow-inner select-none touch-none"
 		style="width: {size}px; height: {size}px;"
 		onmousedown={handleStart}
 		ontouchstart={handleStart}
@@ -189,7 +176,7 @@
 				cx={radius + x}
 				cy={radius + y}
 				r={knobRadius}
-				class="{isAutomatic ? 'fill-slate-400 dark:fill-slate-600 cursor-not-allowed' : 'fill-blue-600 dark:fill-blue-500 cursor-grab active:cursor-grabbing'} shadow-lg transition-colors duration-200"
+				class="fill-blue-600 dark:fill-blue-500 cursor-grab active:cursor-grabbing shadow-lg transition-colors duration-200"
 			/>
 		</svg>
 	</div>

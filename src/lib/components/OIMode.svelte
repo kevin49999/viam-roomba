@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
 	import { READINGS_CONTEXT_KEY, type ReadingsContextValue } from '$lib/contexts/readings';
-	import { BASE_CONTEXT_KEY, type BaseContextValue } from '$lib/contexts/base';
+	import { BRAIN_CONTEXT_KEY, type BrainContextValue } from '$lib/contexts/brain';
 
 	const readingsContext = getContext<ReadingsContextValue>(READINGS_CONTEXT_KEY);
-	const baseContext = getContext<BaseContextValue>(BASE_CONTEXT_KEY);
+	const brainContext = getContext<BrainContextValue>(BRAIN_CONTEXT_KEY);
 
 	if (!readingsContext) {
 		throw new Error('OIMode must be used inside ReadingsProvider');
 	}
-	if (!baseContext) {
-		throw new Error('OIMode must be used inside BaseProvider');
+	if (!brainContext) {
+		throw new Error('OIMode must be used inside BrainProvider');
 	}
 
 	const { query } = readingsContext;
-	const { doCommandMutation, automaticModeQuery } = baseContext;
+	const { doCommandMutation, automaticModeQuery } = brainContext;
 
 	const isAutomatic = $derived.by(() => {
 		const data = automaticModeQuery.data;

@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
-	import { BASE_CONTEXT_KEY, type BaseContextValue } from '$lib/contexts/base';
+	import { BRAIN_CONTEXT_KEY, type BrainContextValue } from '$lib/contexts/brain';
 
-	const baseContext = getContext<BaseContextValue>(BASE_CONTEXT_KEY);
-	if (!baseContext) {
-		throw new Error('AutomaticMode must be used inside BaseProvider');
+	const brainContext = getContext<BrainContextValue>(BRAIN_CONTEXT_KEY);
+	if (!brainContext) {
+		throw new Error('AutomaticMode must be used inside BrainProvider');
 	}
 
-	const { automaticModeQuery, toggleAutomaticMode, doCommandMutation } = baseContext;
+	const { automaticModeQuery, toggleAutomaticMode, doCommandMutation } = brainContext;
 
 	const isAutomatic = $derived.by(() => {
 		const data = automaticModeQuery.data;

@@ -93,10 +93,10 @@
 	];
 
 	// Piano key dimensions
-	const WW = 40; // white key width
-	const WH = 130; // white key height
-	const BW = 25; // black key width
-	const BH = 82; // black key height
+	const WHITE_KEY_WIDTH = 40;
+	const WHITE_KEY_HEIGHT = 130;
+	const BLACK_KEY_WIDTH = 25;
+	const BLACK_KEY_HEIGHT = 82;
 
 	function buildLayout(notes: Note[]): KeyLayout[] {
 		let wi = 0;
@@ -104,9 +104,9 @@
 			const isBlack = note.name.includes('#');
 			let x: number;
 			if (isBlack) {
-				x = wi * WW - BW / 2;
+				x = wi * WHITE_KEY_WIDTH - BLACK_KEY_WIDTH / 2;
 			} else {
-				x = wi * WW;
+				x = wi * WHITE_KEY_WIDTH;
 				wi++;
 			}
 			return { ...note, isBlack, x };
@@ -116,7 +116,7 @@
 	const layout = buildLayout(ALL_NOTES);
 	const whiteKeys = layout.filter((k) => !k.isBlack);
 	const blackKeys = layout.filter((k) => k.isBlack);
-	const totalWidth = whiteKeys.length * WW;
+	const totalWidth = whiteKeys.length * WHITE_KEY_WIDTH;
 
 	// MIDI octave: C4 = note 60 → octave = floor(id/12) - 1
 	function getOctave(id: number): number {
@@ -197,18 +197,18 @@
 		}
 	}
 
-	let kbEl: HTMLElement | undefined;
+	let keyboardElement: HTMLElement | undefined;
 
 	function scrollToKey(key: KeyLayout) {
-		if (!kbEl) return;
-		kbEl.scrollTo({ left: Math.max(0, key.x - kbEl.clientWidth / 2 + WW), behavior: 'smooth' });
+		if (!keyboardElement) return;
+		keyboardElement.scrollTo({ left: Math.max(0, key.x - keyboardElement.clientWidth / 2 + WHITE_KEY_WIDTH), behavior: 'smooth' });
 	}
 
 	onMount(() => {
 		// Default view: center on C4 (note 60)
-		if (kbEl) {
+		if (keyboardElement) {
 			const c4 = layout.find((k) => k.id === 60);
-			if (c4) kbEl.scrollLeft = Math.max(0, c4.x - kbEl.clientWidth / 2 + WW);
+			if (c4) keyboardElement.scrollLeft = Math.max(0, c4.x - keyboardElement.clientWidth / 2 + WHITE_KEY_WIDTH);
 		}
 	});
 
@@ -313,8 +313,8 @@
 	</div>
 
 	<!-- Piano keyboard -->
-	<div bind:this={kbEl} class="overflow-x-auto rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
-		<div class="relative" style="width: {totalWidth}px; height: {WH + 4}px;">
+	<div bind:this={keyboardElement} class="overflow-x-auto rounded-lg bg-slate-100 p-3 dark:bg-slate-800">
+		<div class="relative" style="width: {totalWidth}px; height: {WHITE_KEY_HEIGHT + 4}px;">
 			<!-- White keys (rendered first, behind black keys) -->
 			{#each whiteKeys as key}
 				<button
@@ -323,7 +323,7 @@
 					key.id
 						? 'border-indigo-300 bg-indigo-100 dark:bg-indigo-900/60'
 						: 'border-slate-300 bg-white hover:bg-slate-50 dark:border-slate-500 dark:bg-slate-50 dark:hover:bg-slate-200'}"
-					style="left: {key.x}px; width: {WW - 1}px; height: {WH}px;"
+					style="left: {key.x}px; width: {WHITE_KEY_WIDTH - 1}px; height: {WHITE_KEY_HEIGHT}px;"
 					title="{key.name}{getOctave(key.id)} — #{key.id} — {key.frequency}Hz"
 				>
 					{#if key.name === 'C'}
@@ -343,7 +343,7 @@
 					class="absolute top-0 z-10 select-none rounded-b-md transition-colors {activeId === key.id
 						? 'bg-indigo-600'
 						: 'bg-slate-900 hover:bg-slate-700 dark:bg-zinc-900 dark:hover:bg-zinc-700'}"
-					style="left: {key.x}px; width: {BW}px; height: {BH}px;"
+					style="left: {key.x}px; width: {BLACK_KEY_WIDTH}px; height: {BLACK_KEY_HEIGHT}px;"
 					title="{key.name}{getOctave(key.id)} — #{key.id} — {key.frequency}Hz"
 				>
 				</button>

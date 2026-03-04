@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, getContext } from 'svelte';
+	import { BRAIN_CONTEXT_KEY, type BrainContextValue } from '$lib/contexts/brain';
 
 	interface Note {
 		id: number;
@@ -123,12 +124,25 @@
 		return Math.floor(id / 12) - 1;
 	}
 
+	const brainContext = getContext<BrainContextValue>(BRAIN_CONTEXT_KEY);
+	const { doCommandMutation } = brainContext ?? {};
+
 	// Song and playback state
 	let song: Note[] = $state([]);
 	let recording = $state(false);
 	let playing = $state(false);
 	let activeId = $state<number | null>(null);
 	let playSlot = $state<number | null>(null);
+	let songSlot = $state(1); // 1-4
+
+	function sendSong() {
+		if (!song.length || !doCommandMutation) return;
+		const songBytes: number[] = [songSlot, song.length];
+		for (const note of song) {
+			songBytes.push(note.id, 32);
+		}
+		doCommandMutation.mutate([{ command: 'add_song', song_bytes: songBytes }]);
+	}
 
 	// Tone.js — lazy loaded to avoid SSR issues
 	let synth: any = null;
@@ -237,7 +251,7 @@
 			<span class="text-xs font-medium text-slate-500 dark:text-slate-400"
 				>Song ({song.length}/16 notes)</span
 			>
-			<div class="flex gap-2">
+			<div class="flex gap-2 flex-wrap">
 				<button
 					onclick={playSong}
 					disabled={!song.length || playing}
@@ -254,6 +268,25 @@
 				>
 					Clear
 				</button>
+				{#if doCommandMutation}
+					<div class="flex items-center gap-1">
+						<select
+							bind:value={songSlot}
+							class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+						>
+							{#each [1, 2, 3, 4] as n}
+								<option value={n}>Slot {n}</option>
+							{/each}
+						</select>
+						<button
+							onclick={sendSong}
+							disabled={!song.length || doCommandMutation.isPending}
+							class="rounded-lg px-3 py-1.5 text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+						>
+							Add Song to Roomba
+						</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 

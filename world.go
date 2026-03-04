@@ -161,6 +161,12 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 		s.logger.Infof("draw_obstacle: added obstacle at (%.2f, %.2f, %.2f) m, total=%d", x, y, z, len(s.obstacles))
 		return map[string]interface{}{"status": "obstacle_added", "count": len(s.obstacles)}, nil
 
+	case "clear_obstacles":
+		count := len(s.obstacles)
+		s.obstacles = []*commonPB.Transform{}
+		s.logger.Infof("clear_obstacles: cleared %d obstacles", count)
+		return map[string]interface{}{"status": "obstacles_cleared", "count": count}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown command: %s", cmdName)
 	}

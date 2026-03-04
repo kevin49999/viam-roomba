@@ -17,6 +17,7 @@
 	import ReadingsProvider from './ReadingsProvider.svelte';
 	import RoombaVisualizer from './RoombaVisualizer.svelte';
 	import UltraSonic from './UltraSonic.svelte';
+	import MidiKeyboard from './MidiKeyboard.svelte';
 
 	let { host, credentials, machineId } = $props<{
 		host: string;
@@ -104,6 +105,10 @@
 
 						<div>
 							<AllReadings />
+						</div>
+
+						<div>
+							<MidiKeyboard />
 						</div>
 					</div>
 				</CameraProvider>

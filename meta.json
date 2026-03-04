@@ -19,6 +19,11 @@
       "api": "rdk:service:generic",
       "model": "dan:viam-roomba:brain",
       "markdown_link": "jalen_viam-roomba_generic.md"
+    },
+    {
+      "api": "rdk:service:worldstatestore",
+      "model": "dan:viam-roomba:world",
+      "markdown_link": "jalen_viam-roomba_worldstatestore.md"
     }
   ],
   "applications": null,

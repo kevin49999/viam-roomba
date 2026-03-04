@@ -10,6 +10,7 @@ import (
 	"go.viam.com/rdk/module"
 	"go.viam.com/rdk/resource"
 	generic "go.viam.com/rdk/services/generic"
+	worldstatestore "go.viam.com/rdk/services/worldstatestore"
 )
 
 func main() {
@@ -22,5 +23,6 @@ func main() {
 		resource.APIModel{API: base.API, Model: viamroomba.Base},
 		resource.APIModel{API: sensor.API, Model: viamroomba.Sensor},
 		resource.APIModel{API: generic.API, Model: viamroomba.Brain},
+		resource.APIModel{API: worldstatestore.API, Model: viamroomba.RoombaWorld},
 	)
 }

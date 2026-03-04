@@ -20,9 +20,9 @@
 		{ command: 'seek_dock', label: 'Seek Dock' },
 		{ command: 'reset_position', label: 'Reset Position' },
 		{ command: 'add_song', label: 'Add Song' },
-		{ command: 'play_song', label: 'Play LOTR' },
-		{ command: 'play_vader_song', label: 'Play Vader' },
 	] as const;
+
+	let songNumber = 0;
 </script>
 
 <div class="flex flex-col gap-4">
@@ -37,6 +37,25 @@
 				{label}
 			</button>
 		{/each}
+		<div class="flex items-center gap-2">
+			<label for="song-number" class="text-sm font-medium text-slate-700 dark:text-slate-300">Song #</label>
+			<input
+				id="song-number"
+				type="number"
+				min="0"
+				max="4"
+				bind:value={songNumber}
+				class="w-16 rounded bg-slate-100 px-2 py-1.5 text-sm text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
+			/>
+			<button
+				type="button"
+				onclick={() => send('play_song', { song_number: songNumber })}
+				disabled={doCommandMutation.isPending}
+				class="rounded bg-slate-800 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+			>
+				Play Song
+			</button>
+		</div>
 	</div>
 
 	{#if doCommandMutation.isError}

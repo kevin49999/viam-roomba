@@ -21,7 +21,7 @@
       "markdown_link": "jalen_viam-roomba_generic.md"
     },
     {
-      "api": "rdk:service:worldstatestore",
+      "api": "rdk:service:world_state_store",
       "model": "dan:viam-roomba:world",
       "markdown_link": "jalen_viam-roomba_worldstatestore.md"
     }

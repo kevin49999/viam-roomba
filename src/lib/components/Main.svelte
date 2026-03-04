@@ -44,7 +44,7 @@
 
 <ViamProvider {dialConfigs}>
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
-		<BrainProvider partID={DEFAULT_PART_ID} name="brain">
+		<BrainProvider partID={DEFAULT_PART_ID} name="roomba-brain">
 			<BaseProvider partID={DEFAULT_PART_ID} name="base">
 				<CameraProvider partID={DEFAULT_PART_ID} name="camera-1">
 					<div class="flex flex-col gap-6">

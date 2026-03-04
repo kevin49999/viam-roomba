@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { createResourceClient, createResourceMutation, createResourceQuery } from '@viamrobotics/svelte-sdk';
-	import { GenericClient } from '@viamrobotics/sdk';
+	import { GenericServiceClient } from '@viamrobotics/sdk';
 	import { setContext } from 'svelte';
 	import { BRAIN_CONTEXT_KEY, type BrainContextValue } from '$lib/contexts/brain';
 
@@ -12,7 +12,7 @@
 
 	let { partID, name, children }: Props = $props();
 
-	const brainClient = createResourceClient(GenericClient, () => partID, () => name);
+	const brainClient = createResourceClient(GenericServiceClient, () => partID, () => name);
 	const doCommandMutation = createResourceMutation(brainClient, 'doCommand');
 
 	const automaticModeQuery = createResourceQuery(

@@ -133,7 +133,7 @@
 	let playing = $state(false);
 	let activeId = $state<number | null>(null);
 	let playSlot = $state<number | null>(null);
-	let songSlot = $state(1); // 1-4
+	let songSlot = $state(0); // 0-4
 
 	function sendSong() {
 		if (!song.length || !doCommandMutation) return;
@@ -274,7 +274,7 @@
 							bind:value={songSlot}
 							class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
 						>
-							{#each [1, 2, 3, 4] as n}
+							{#each [0, 1, 2, 3, 4] as n}
 								<option value={n}>Slot {n}</option>
 							{/each}
 						</select>

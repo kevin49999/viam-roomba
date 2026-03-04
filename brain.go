@@ -145,6 +145,7 @@ func (s *brainBrain) Name() resource.Name {
 }
 
 func (s *brainBrain) DoCommand(ctx context.Context, cmd map[string]any) (map[string]any, error) {
+	s.logger.Infof("DoCommand: %v", cmd)
 	cmdName, ok := cmd["command"].(string)
 	if !ok {
 		return nil, fmt.Errorf("command must be a string")
@@ -207,9 +208,10 @@ func (s *brainBrain) DoCommand(ctx context.Context, cmd map[string]any) (map[str
 	if s.conn == nil {
 		return nil, fmt.Errorf("command %q requires serial_port to be configured on the brain", cmdName)
 	}
+	s.logger.Infof("Try to aquire lock: %v", cmd)
 	s.conn.mu.Lock()
 	defer s.conn.mu.Unlock()
-
+	s.logger.Infof("Aquired lock: %v", cmd)
 	switch cmdName {
 	case "enter_full_mode":
 		if err := s.conn.roomba.Full(); err != nil {
@@ -261,44 +263,28 @@ func (s *brainBrain) DoCommand(ctx context.Context, cmd map[string]any) (map[str
 		return map[string]any{"status": "started"}, nil
 
 	case "add_song":
-		lotrBytes := []byte{0x01, 0x10, 0x3E, 0x10, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x20, 0x35, 0x10, 0x37, 0x10, 0x39, 0x10, 0x3E, 0x20, 0x3C, 0x10, 0x39, 0x10, 0x37, 0x10, 0x35, 0x20, 0x37, 0x10, 0x39, 0x10, 0x35, 0x10, 0x32, 0x20}
-		if err := s.conn.roomba.Write(0x8C, lotrBytes); err != nil {
+		s.logger.Infof("Add song: %v", cmd)
+		raw_song_bytes := cmd["song_bytes"].([]interface{})
+		song_bytes := make([]byte, len(raw_song_bytes))
+		for i, b := range raw_song_bytes {
+			song_bytes[i] = byte(b.(float64))
+		}
+
+		if err := s.conn.roomba.Write(0x8C, song_bytes); err != nil {
 			return nil, fmt.Errorf("failed to write song: %w", err)
 		}
-		vaderBytes := []byte{
-			0x00, 0x10, 0x37, 0x10,
-			0x37, 0x10,
-			0x37, 0x10,
-			0x3C, 0x08,
-			0x41, 0x08,
-			0x37, 0x10,
-			0x3C, 0x08,
-			0x41, 0x08,
-			0x37, 0x20,
-			0x44, 0x10,
-			0x44, 0x10,
-			0x44, 0x10,
-			0x45, 0x08,
-			0x41, 0x08,
-			0x3E, 0x10,
-			0x3C, 0x08,
-		}
-		if err := s.conn.roomba.Write(0x8C, vaderBytes); err != nil {
-			return nil, fmt.Errorf("failed to write Vader's theme song: %w", err)
-		}
+		s.logger.Infof("Song written: %v", song_bytes)
 		return map[string]any{"status": "song_written"}, nil
 
 	case "play_song":
-		if err := s.conn.roomba.Write(0x8D, []byte{0x01}); err != nil {
+		song_number, ok := cmd["song_number"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("song_number must be an integer")
+		}
+		if err := s.conn.roomba.Write(0x8D, []byte{byte(song_number)}); err != nil {
 			return nil, fmt.Errorf("failed to play song: %w", err)
 		}
 		return map[string]any{"status": "song_played"}, nil
-
-	case "play_vader_song":
-		if err := s.conn.roomba.Write(0x8D, []byte{0x00}); err != nil {
-			return nil, fmt.Errorf("failed to play Vader's theme song: %w", err)
-		}
-		return map[string]any{"status": "vader_song_played"}, nil
 
 	default:
 		s.logger.Infof("DoCommand: unknown command '%s'", cmdName)
@@ -498,4 +484,3 @@ func (s *brainBrain) start_automatic_mode() error {
 func (s *brainBrain) IsInAutomaticMode() bool {
 	return s.in_automatic_mode.Load()
 }
-

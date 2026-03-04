@@ -2,6 +2,7 @@ package viamroomba
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 
 	commonPB "go.viam.com/api/common/v1"
@@ -59,8 +60,9 @@ type roombaWorldRoombaWorld struct {
 
 	name resource.Name
 
-	logger logging.Logger
-	cfg    *WorldConfig
+	logger    logging.Logger
+	cfg       *WorldConfig
+	obstacles []*commonPB.Transform
 
 	cancelCtx  context.Context
 	cancelFunc func()
@@ -84,6 +86,7 @@ func NewRoombaWorld(ctx context.Context, deps resource.Dependencies, name resour
 		name:       name,
 		logger:     logger,
 		cfg:        conf,
+		obstacles:  []*commonPB.Transform{},
 		cancelCtx:  cancelCtx,
 		cancelFunc: cancelFunc,
 	}
@@ -107,7 +110,60 @@ func (s *roombaWorldRoombaWorld) StreamTransformChanges(ctx context.Context, ext
 }
 
 func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
-	return nil, fmt.Errorf("not implemented")
+	cmdName, ok := cmd["command"].(string)
+	if !ok {
+		return nil, fmt.Errorf("command must be a string")
+	}
+
+	switch cmdName {
+	case "draw_obstacle":
+		x, ok := cmd["x"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("x must be a number")
+		}
+		y, ok := cmd["y"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("y must be a number")
+		}
+		z, ok := cmd["z"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("z must be a number")
+		}
+
+		uuid := make([]byte, 16)
+		if _, err := rand.Read(uuid); err != nil {
+			return nil, fmt.Errorf("failed to generate uuid: %w", err)
+		}
+
+		// x, y, z are in meters; Pose uses millimeters
+		transform := &commonPB.Transform{
+			ReferenceFrame: "world",
+			PoseInObserverFrame: &commonPB.PoseInFrame{
+				ReferenceFrame: "world",
+				Pose: &commonPB.Pose{
+					X: x * 1000,
+					Y: y * 1000,
+					Z: z * 1000,
+					OZ: 1,
+				},
+			},
+			PhysicalObject: &commonPB.Geometry{
+				Center: &commonPB.Pose{X: 0, Y: 0, Z: 0, OZ: 1},
+				GeometryType: &commonPB.Geometry_Box{
+					Box: &commonPB.RectangularPrism{
+						DimsMm: &commonPB.Vector3{X: 1000, Y: 1000, Z: 1000},
+					},
+				},
+			},
+			Uuid: uuid,
+		}
+		s.obstacles = append(s.obstacles, transform)
+		s.logger.Infof("draw_obstacle: added obstacle at (%.2f, %.2f, %.2f) m, total=%d", x, y, z, len(s.obstacles))
+		return map[string]interface{}{"status": "obstacle_added", "count": len(s.obstacles)}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown command: %s", cmdName)
+	}
 }
 
 func (s *roombaWorldRoombaWorld) Close(context.Context) error {

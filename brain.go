@@ -373,6 +373,11 @@ func (s *brainBrain) start_automatic_mode() error {
 	s.bearing_deg = 0
 	s.obstaclePositions = []ObstaclePosition{}
 	s.DoCommand(ctx, map[string]any{"command": "play_song"})
+	if s.worldService != nil {
+		if _, err := s.worldService.DoCommand(ctx, map[string]any{"command": "clear_obstacles"}); err != nil {
+			s.logger.Warnf("start_automatic_mode: failed to clear obstacles: %v", err)
+		}
+	}
 	s.logger.Info("start_automatic_mode: entered")
 	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
 	// NOTE: TO EXIT AUTO MODE WE HAVE TO RESTART THE MODULE ( there was a weird bug where it would reconfigure and then automatic mode would stop)

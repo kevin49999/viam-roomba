@@ -7,6 +7,8 @@
 	import BaseCommands from './BaseCommands.svelte';
 	import BaseProvider from './BaseProvider.svelte';
 	import BatteryPercent from './BatteryPercent.svelte';
+	import BrainCommands from './BrainCommands.svelte';
+	import BrainProvider from './BrainProvider.svelte';
 	import Camera from './Camera.svelte';
 	import CameraProvider from './CameraProvider.svelte';
 	import Joystick from './Joystick.svelte';
@@ -42,63 +44,70 @@
 
 <ViamProvider {dialConfigs}>
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
-		<BaseProvider partID={DEFAULT_PART_ID} name="base">
-			<CameraProvider partID={DEFAULT_PART_ID} name="camera-1">
-				<div class="flex flex-col gap-6">
-					<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-						<div class="lg:col-span-2 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
-							<div class="flex flex-wrap items-center justify-between gap-4">
-								<div>
-									<h1 class="text-xl font-bold text-slate-900 dark:text-white">Roomba Dashboard</h1>
-									<p class="text-xs text-slate-500 font-mono mt-1">{host}</p>
-								</div>
-								<div class="flex items-center gap-6">
-									<ReadingsProvider partID={DEFAULT_PART_ID} name="ultra-sonic">
-										<UltraSonic />
-									</ReadingsProvider>
-									<BatteryPercent />
-								</div>
-							</div>
+		<BrainProvider partID={DEFAULT_PART_ID} name="brain">
+			<BaseProvider partID={DEFAULT_PART_ID} name="base">
+				<CameraProvider partID={DEFAULT_PART_ID} name="camera-1">
+					<div class="flex flex-col gap-6">
+						<div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+							<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Brain Commands</h2>
+							<BrainCommands />
+						</div>
 
-							<div class="h-px bg-slate-100 dark:bg-slate-800"></div>
+						<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+							<div class="lg:col-span-2 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
+								<div class="flex flex-wrap items-center justify-between gap-4">
+									<div>
+										<h1 class="text-xl font-bold text-slate-900 dark:text-white">Roomba Dashboard</h1>
+										<p class="text-xs text-slate-500 font-mono mt-1">{host}</p>
+									</div>
+									<div class="flex items-center gap-6">
+										<ReadingsProvider partID={DEFAULT_PART_ID} name="ultra-sonic">
+											<UltraSonic />
+										</ReadingsProvider>
+										<BatteryPercent />
+									</div>
+								</div>
 
-							<div class="flex flex-wrap items-center gap-6">
-								<div class="flex flex-col gap-6">
-									<div class="flex flex-col gap-2">
-										<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
-										<div class="flex flex-wrap items-center gap-4">
-											<OIMode />
-											<AutomaticMode />
+								<div class="h-px bg-slate-100 dark:bg-slate-800"></div>
+
+								<div class="flex flex-wrap items-center gap-6">
+									<div class="flex flex-col gap-6">
+										<div class="flex flex-col gap-2">
+											<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Control Mode</span>
+											<div class="flex flex-wrap items-center gap-4">
+												<OIMode />
+												<AutomaticMode />
+											</div>
+										</div>
+
+										<div class="flex flex-col gap-2">
+											<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
+											<BaseCommands />
+										</div>
+
+										<div class="flex flex-col gap-2">
+											<Joystick />
 										</div>
 									</div>
-									
-									<div class="flex flex-col gap-2">
-										<span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Actions</span>
-										<BaseCommands />
-									</div>
 
-									<div class="flex flex-col gap-2">
-										<Joystick />
+									<div class="flex-grow max-w-sm">
+										<RoombaVisualizer />
 									</div>
-								</div>
-
-								<div class="flex-grow max-w-sm">
-									<RoombaVisualizer />
 								</div>
 							</div>
+
+							<div class="lg:col-span-1">
+								<!-- TODO: replace with actual stream using robot stream -->
+								<Camera/>
+							</div>
 						</div>
-						
-						<div class="lg:col-span-1">
-							<!-- TODO: replace with actual stream using robot stream -->
-							<Camera/>
+
+						<div>
+							<AllReadings />
 						</div>
 					</div>
-					
-					<div>
-						<AllReadings />
-					</div>
-				</div>
-			</CameraProvider>
-		</BaseProvider>
+				</CameraProvider>
+			</BaseProvider>
+		</BrainProvider>
 	</ReadingsProvider>
 </ViamProvider>

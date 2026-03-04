@@ -123,8 +123,6 @@
 		return Math.floor(id / 12) - 1;
 	}
 
-	const cMarkers = layout.filter((k) => k.name === 'C' && !k.isBlack);
-
 	// Song and playback state
 	let song: Note[] = $state([]);
 	let recording = $state(false);
@@ -198,11 +196,6 @@
 	}
 
 	let keyboardElement: HTMLElement | undefined;
-
-	function scrollToKey(key: KeyLayout) {
-		if (!keyboardElement) return;
-		keyboardElement.scrollTo({ left: Math.max(0, key.x - keyboardElement.clientWidth / 2 + WHITE_KEY_WIDTH), behavior: 'smooth' });
-	}
 
 	onMount(() => {
 		// Default view: center on C4 (note 60)
@@ -297,19 +290,6 @@
 				IDs: [{song.map((n) => n.id).join(', ')}]
 			</p>
 		{/if}
-	</div>
-
-	<!-- Octave jump buttons -->
-	<div class="mb-3 flex flex-wrap items-center gap-1.5">
-		<span class="text-xs text-slate-400">Jump to:</span>
-		{#each cMarkers as marker}
-			<button
-				onclick={() => scrollToKey(marker)}
-				class="rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-indigo-900/40 dark:hover:text-indigo-400 transition-colors"
-			>
-				C{getOctave(marker.id)}
-			</button>
-		{/each}
 	</div>
 
 	<!-- Piano keyboard -->

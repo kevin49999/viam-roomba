@@ -1,0 +1,197 @@
+package viamroomba
+
+import (
+	"context"
+	"crypto/rand"
+	"fmt"
+	"sync"
+
+	"github.com/google/uuid"
+	commonPB "go.viam.com/api/common/v1"
+	"go.viam.com/rdk/logging"
+	"go.viam.com/rdk/resource"
+	worldstatestore "go.viam.com/rdk/services/worldstatestore"
+)
+
+var (
+	RoombaWorld = resource.NewModel("dan", "viam-roomba", "world")
+)
+
+func init() {
+	resource.RegisterService(worldstatestore.API, RoombaWorld,
+		resource.Registration[worldstatestore.Service, *WorldConfig]{
+			Constructor: newRoombaWorldRoombaWorld,
+		},
+	)
+}
+
+type WorldConfig struct {
+	/*
+		Put config attributes here. There should be public/exported fields
+		with a `json` parameter at the end of each attribute.
+
+		Example config struct:
+			type Config struct {
+				Pin   string `json:"pin"`
+				Board string `json:"board"`
+				MinDeg *float64 `json:"min_angle_deg,omitempty"`
+			}
+
+		If your model does not need a config, replace *Config in the init
+		function with resource.NoNativeConfig
+	*/
+}
+
+// Validate ensures all parts of the config are valid and important fields exist.
+// Returns three values:
+//  1. Required dependencies: other resources that must exist for this resource to work.
+//  2. Optional dependencies: other resources that may exist but are not required.
+//  3. An error if any Config fields are missing or invalid.
+//
+// The `path` parameter indicates
+// where this resource appears in the machine's JSON configuration
+// (for example, "components.0"). You can use it in error messages
+// to indicate which resource has a problem.
+func (cfg *WorldConfig) Validate(path string) ([]string, []string, error) {
+	// Add config validation code here
+	return nil, nil, nil
+}
+
+type roombaWorldRoombaWorld struct {
+	resource.AlwaysRebuild
+	mu   sync.RWMutex
+	name resource.Name
+
+	logger    logging.Logger
+	cfg       *WorldConfig
+	obstacles map[string]*commonPB.Transform
+	fps       float64
+
+	changeChan chan worldstatestore.TransformChange
+	cancelCtx  context.Context
+	cancelFunc func()
+}
+
+func newRoombaWorldRoombaWorld(ctx context.Context, deps resource.Dependencies, rawConf resource.Config, logger logging.Logger) (worldstatestore.Service, error) {
+	conf, err := resource.NativeConfig[*WorldConfig](rawConf)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewRoombaWorld(ctx, deps, rawConf.ResourceName(), conf, logger)
+
+}
+
+func NewRoombaWorld(ctx context.Context, deps resource.Dependencies, name resource.Name, conf *WorldConfig, logger logging.Logger) (worldstatestore.Service, error) {
+
+	cancelCtx, cancelFunc := context.WithCancel(context.Background())
+
+	s := &roombaWorldRoombaWorld{
+		name:       name,
+		logger:     logger,
+		cfg:        conf,
+		obstacles:  make(map[string]*commonPB.Transform),
+		cancelCtx:  cancelCtx,
+		cancelFunc: cancelFunc,
+	}
+	return s, nil
+}
+
+func (s *roombaWorldRoombaWorld) Name() resource.Name {
+	return s.name
+}
+
+func (s *roombaWorldRoombaWorld) ListUUIDs(ctx context.Context, extra map[string]interface{}) ([][]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	uuids := make([][]byte, 0, len(s.obstacles))
+	for _, obstacle := range s.obstacles {
+		parsedId, err := uuid.FromBytes(obstacle.Uuid)
+		if err != nil {
+			s.logger.Errorw("Failed to parse UUID", "error", err.Error())
+			return nil, err
+		}
+
+		uuids = append(uuids, parsedId[:])
+	}
+
+	return uuids, nil
+}
+
+func (s *roombaWorldRoombaWorld) GetTransform(ctx context.Context, uuid []byte, extra map[string]interface{}) (*commonPB.Transform, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *roombaWorldRoombaWorld) StreamTransformChanges(ctx context.Context, extra map[string]interface{}) (*worldstatestore.TransformChangeStream, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	cmdName, ok := cmd["command"].(string)
+	if !ok {
+		return nil, fmt.Errorf("command must be a string")
+	}
+
+	switch cmdName {
+	case "draw_obstacle":
+		x, ok := cmd["x"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("x must be a number")
+		}
+		y, ok := cmd["y"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("y must be a number")
+		}
+		z, ok := cmd["z"].(float64)
+		if !ok {
+			return nil, fmt.Errorf("z must be a number")
+		}
+
+		uuid := make([]byte, 16)
+		if _, err := rand.Read(uuid); err != nil {
+			return nil, fmt.Errorf("failed to generate uuid: %w", err)
+		}
+
+		// x, y, z are in meters; Pose uses millimeters
+		transform := &commonPB.Transform{
+			ReferenceFrame: "world",
+			PoseInObserverFrame: &commonPB.PoseInFrame{
+				ReferenceFrame: "world",
+				Pose: &commonPB.Pose{
+					X:  x * 1000,
+					Y:  y * 1000,
+					Z:  z * 1000,
+					OZ: 1,
+				},
+			},
+			PhysicalObject: &commonPB.Geometry{
+				Center: &commonPB.Pose{X: 0, Y: 0, Z: 0, OZ: 1},
+				GeometryType: &commonPB.Geometry_Box{
+					Box: &commonPB.RectangularPrism{
+						DimsMm: &commonPB.Vector3{X: 1000, Y: 1000, Z: 1000},
+					},
+				},
+			},
+			Uuid: uuid,
+		}
+		s.obstacles[string(uuid)] = transform
+		s.logger.Infof("draw_obstacle: added obstacle at (%.2f, %.2f, %.2f) m, total=%d", x, y, z, len(s.obstacles))
+		return map[string]interface{}{"status": "obstacle_added", "count": len(s.obstacles)}, nil
+
+	case "clear_obstacles":
+		count := len(s.obstacles)
+		s.obstacles = make(map[string]*commonPB.Transform)
+		s.logger.Infof("clear_obstacles: cleared %d obstacles", count)
+		return map[string]interface{}{"status": "obstacles_cleared", "count": count}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown command: %s", cmdName)
+	}
+}
+
+func (s *roombaWorldRoombaWorld) Close(context.Context) error {
+	// Put close code here
+	s.cancelFunc()
+	return nil
+}

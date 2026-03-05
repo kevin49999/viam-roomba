@@ -59,7 +59,11 @@
 	</div>
 
 	{#if doCommandMutation.isError}
-		<p class="text-sm text-red-600 dark:text-red-400">{doCommandMutation.error?.message}</p>
+		{#if doCommandMutation.error?.message === 'Timed out waiting for robot to respond'}
+			<p class="text-sm text-amber-600 dark:text-amber-400">{doCommandMutation.error.message}</p>
+		{:else}
+			<p class="text-sm text-red-600 dark:text-red-400">{doCommandMutation.error?.message}</p>
+		{/if}
 	{/if}
 	{#if doCommandMutation.isSuccess}
 		<p class="text-xs text-slate-500 dark:text-slate-400 font-mono">

@@ -8,9 +8,26 @@
 		frequency: number;
 	}
 
+	interface SongNote extends Note {
+		duration: number; // Roomba duration byte: 8=1/8, 16=1/4, 32=1/2, 64=whole
+	}
+
 	interface KeyLayout extends Note {
 		isBlack: boolean;
 		x: number;
+	}
+
+	const DURATION_OPTIONS = [
+		{ label: '1/8', value: 8, tone: '8n', secs: 0.3 },
+		{ label: '1/4', value: 16, tone: '4n', secs: 0.55 },
+		{ label: '1/2', value: 32, tone: '2n', secs: 1.05 },
+		{ label: 'W', value: 64, tone: '1n', secs: 2.05 }
+	] as const;
+
+	type DurationValue = (typeof DURATION_OPTIONS)[number]['value'];
+
+	function getDurationOption(value: number) {
+		return DURATION_OPTIONS.find((d) => d.value === value) ?? DURATION_OPTIONS[1];
 	}
 
 	const ALL_NOTES: Note[] = [
@@ -128,18 +145,19 @@
 	const { doCommandMutation } = brainContext ?? {};
 
 	// Song and playback state
-	let song: Note[] = $state([]);
+	let song: SongNote[] = $state([]);
 	let recording = $state(false);
 	let playing = $state(false);
 	let activeId = $state<number | null>(null);
 	let playSlot = $state<number | null>(null);
 	let songSlot = $state(0); // 0-4
+	let selectedDuration = $state<DurationValue>(16); // default 1/4 note
 
 	function sendSong() {
 		if (!song.length || !doCommandMutation) return;
 		const songBytes: number[] = [songSlot, song.length];
 		for (const note of song) {
-			songBytes.push(note.id, 32);
+			songBytes.push(note.id, note.duration);
 		}
 		doCommandMutation.mutate([{ command: 'add_song', song_bytes: songBytes }]);
 	}
@@ -161,19 +179,20 @@
 	async function playNote(note: Note) {
 		activeId = note.id;
 		const id = note.id;
+		const dur = getDurationOption(selectedDuration);
 		setTimeout(() => {
 			if (activeId === id) activeId = null;
-		}, 350);
+		}, dur.secs * 1000);
 
 		try {
 			await initTone();
-			synth.triggerAttackRelease(note.frequency, '8n');
+			synth.triggerAttackRelease(note.frequency, dur.tone);
 		} catch (e) {
 			console.error('playNote error:', e);
 		}
 
 		if (recording && song.length < 16) {
-			song = [...song, note];
+			song = [...song, { ...note, duration: selectedDuration }];
 		}
 	}
 
@@ -185,14 +204,17 @@
 		try {
 			await initTone();
 			const now = ToneLib.now();
-			const step = 0.45; // seconds between notes
 			const snapshot = [...song];
 
+			let offset = 0;
 			snapshot.forEach((note, i) => {
-				synth.triggerAttackRelease(note.frequency, '8n', now + i * step);
+				const dur = getDurationOption(note.duration);
+				synth.triggerAttackRelease(note.frequency, dur.tone, now + offset);
+				const noteOffset = offset;
 				setTimeout(() => {
 					playSlot = i;
-				}, i * step * 1000);
+				}, noteOffset * 1000);
+				offset += dur.secs;
 			});
 
 			setTimeout(
@@ -200,7 +222,7 @@
 					playing = false;
 					playSlot = null;
 				},
-				snapshot.length * step * 1000 + 600
+				offset * 1000 + 600
 			);
 		} catch (e) {
 			console.error('playSong error:', e);
@@ -230,19 +252,35 @@
 	class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50"
 >
 	<!-- Header -->
-	<div class="mb-4 flex items-center justify-between">
+	<div class="mb-4 flex items-center justify-between flex-wrap gap-2">
 		<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400">MIDI Keyboard</h2>
-		<button
-			onclick={() => (recording = !recording)}
-			class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors {recording
-				? 'bg-red-500 text-white hover:bg-red-600'
-				: 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}"
-		>
-			<span
-				class="h-2 w-2 rounded-full {recording ? 'animate-pulse bg-white' : 'bg-slate-400'}"
-			></span>
-			{recording ? 'Recording' : 'Record'}
-		</button>
+		<div class="flex items-center gap-2 flex-wrap">
+			<!-- Duration selector -->
+			<div class="flex items-center gap-1">
+				<span class="text-xs text-slate-400">Duration:</span>
+				{#each DURATION_OPTIONS as opt}
+					<button
+						onclick={() => (selectedDuration = opt.value)}
+						class="rounded px-2 py-1 text-xs font-medium transition-colors {selectedDuration === opt.value
+							? 'bg-indigo-500 text-white'
+							: 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}"
+					>
+						{opt.label}
+					</button>
+				{/each}
+			</div>
+			<button
+				onclick={() => (recording = !recording)}
+				class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors {recording
+					? 'bg-red-500 text-white hover:bg-red-600'
+					: 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}"
+			>
+				<span
+					class="h-2 w-2 rounded-full {recording ? 'animate-pulse bg-white' : 'bg-slate-400'}"
+				></span>
+				{recording ? 'Recording' : 'Record'}
+			</button>
+		</div>
 	</div>
 
 	<!-- Song builder -->
@@ -305,7 +343,7 @@
 							: 'border-slate-200 bg-slate-50 text-slate-700 hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-red-900/30 dark:hover:text-red-400'}"
 					>
 						<span class="leading-none">{song[i].name}</span>
-						<span class="text-[9px] font-normal opacity-50">{i + 1}</span>
+						<span class="text-[9px] font-normal opacity-70">{getDurationOption(song[i].duration).label}</span>
 					</button>
 				{:else}
 					<div

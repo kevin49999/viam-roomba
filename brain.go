@@ -13,6 +13,7 @@ import (
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	generic "go.viam.com/rdk/services/generic"
+	"go.viam.com/rdk/services/worldstatestore"
 )
 
 var (
@@ -32,6 +33,7 @@ type BrainConfig struct {
 	RoombaSensor     string `json:"roomba_sensor"`
 	UltrasonicSensor string `json:"ultrasonic_sensor"`
 	SerialPort       string `json:"serial_port,omitempty"`
+	WorldService     string `json:"world_service,omitempty"`
 }
 
 func (cfg *BrainConfig) Validate(path string) ([]string, []string, error) {
@@ -45,7 +47,11 @@ func (cfg *BrainConfig) Validate(path string) ([]string, []string, error) {
 	if cfg.UltrasonicSensor != "" {
 		required = append(required, cfg.UltrasonicSensor)
 	}
-	return required, nil, nil
+	var optional []string
+	if cfg.WorldService != "" {
+		optional = append(optional, cfg.WorldService)
+	}
+	return required, optional, nil
 }
 
 type ObstaclePosition struct {
@@ -63,6 +69,7 @@ type brainBrain struct {
 	base_            rbase.Base
 	roombaSensor     sensor.Sensor
 	ultrasonicSensor sensor.Sensor
+	worldService     worldstatestore.Service
 
 	conn       *roombaConn
 	serialPort string
@@ -124,6 +131,15 @@ func NewBrain(ctx context.Context, deps resource.Dependencies, name resource.Nam
 			return nil, fmt.Errorf("failed to get ultrasonic sensor %q: %w", conf.UltrasonicSensor, err)
 		}
 		s.ultrasonicSensor = ultrasonicSensor
+	}
+
+	if conf.WorldService != "" {
+		worldSvc, err := worldstatestore.FromProvider(deps, conf.WorldService)
+		if err != nil {
+			logger.Warnf("NewBrain: could not get world service %q, obstacle reporting disabled: %v", conf.WorldService, err)
+		} else {
+			s.worldService = worldSvc
+		}
 	}
 
 	if conf.SerialPort != "" {
@@ -332,6 +348,22 @@ func (s *brainBrain) add_obstacle_position(distance_in_front_of_roomba_mm float6
 	s.obstaclePositions = append(s.obstaclePositions, ObstaclePosition{x_mm: obstacle_x, y_mm: obstacle_y})
 }
 
+func (s *brainBrain) report_last_obstacle_to_world_service(ctx context.Context) {
+	if s.worldService == nil || len(s.obstaclePositions) == 0 {
+		return
+	}
+	last := s.obstaclePositions[len(s.obstaclePositions)-1]
+	_, err := s.worldService.DoCommand(ctx, map[string]any{
+		"command": "draw_obstacle",
+		"x":       last.x_mm / 1000.0,
+		"y":       last.y_mm / 1000.0,
+		"z":       0.0,
+	})
+	if err != nil {
+		s.logger.Warnf("report_last_obstacle_to_world_service: failed: %v", err)
+	}
+}
+
 // WARNING: very messy code below
 func (s *brainBrain) start_automatic_mode() error {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -341,6 +373,11 @@ func (s *brainBrain) start_automatic_mode() error {
 	s.bearing_deg = 0
 	s.obstaclePositions = []ObstaclePosition{}
 	s.DoCommand(ctx, map[string]any{"command": "play_song"})
+	if s.worldService != nil {
+		if _, err := s.worldService.DoCommand(ctx, map[string]any{"command": "clear_obstacles"}); err != nil {
+			s.logger.Warnf("start_automatic_mode: failed to clear obstacles: %v", err)
+		}
+	}
 	s.logger.Info("start_automatic_mode: entered")
 	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
 	// NOTE: TO EXIT AUTO MODE WE HAVE TO RESTART THE MODULE ( there was a weird bug where it would reconfigure and then automatic mode would stop)
@@ -386,7 +423,7 @@ func (s *brainBrain) start_automatic_mode() error {
 
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
 			s.add_obstacle_position(10)
-			//  TODO: place obstacles in a world service here
+			s.report_last_obstacle_to_world_service(ctx)
 			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
 				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
 			// go backwards
@@ -440,6 +477,7 @@ func (s *brainBrain) start_automatic_mode() error {
 		s.logger.Infof("start_automatic_mode: ultrasonic_distance=%f m", ultrasonic_distance_m)
 		if ultrasonic_distance_m < 0.75 {
 			s.add_obstacle_position(ultrasonic_distance_m * 1000.0)
+			s.report_last_obstacle_to_world_service(ctx)
 			s.logger.Infof("start_automatic_mode: ultrasonic_distance is too close, turning away")
 			// go backwards
 			distanceMm := -500
@@ -472,8 +510,6 @@ func (s *brainBrain) start_automatic_mode() error {
 			s.logger.Info("start_automatic_mode: continuing loop after ultrasonic obstacle turn")
 			continue
 		}
-		// TODO: use obstacle detect service to check if other stuff in way with non roomba native sensors (&& place obstacles in a world service here)
-
 	}
 	s.logger.Info("start_automatic_mode: exited (in_automatic_mode is false)")
 	return nil

@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"sync"
 
+	"github.com/google/uuid"
 	commonPB "go.viam.com/api/common/v1"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
@@ -57,13 +59,15 @@ func (cfg *WorldConfig) Validate(path string) ([]string, []string, error) {
 
 type roombaWorldRoombaWorld struct {
 	resource.AlwaysRebuild
-
+	mu   sync.RWMutex
 	name resource.Name
 
 	logger    logging.Logger
 	cfg       *WorldConfig
-	obstacles []*commonPB.Transform
+	obstacles map[string]*commonPB.Transform
+	fps       float64
 
+	changeChan chan worldstatestore.TransformChange
 	cancelCtx  context.Context
 	cancelFunc func()
 }
@@ -86,7 +90,7 @@ func NewRoombaWorld(ctx context.Context, deps resource.Dependencies, name resour
 		name:       name,
 		logger:     logger,
 		cfg:        conf,
-		obstacles:  []*commonPB.Transform{},
+		obstacles:  make(map[string]*commonPB.Transform),
 		cancelCtx:  cancelCtx,
 		cancelFunc: cancelFunc,
 	}
@@ -98,7 +102,21 @@ func (s *roombaWorldRoombaWorld) Name() resource.Name {
 }
 
 func (s *roombaWorldRoombaWorld) ListUUIDs(ctx context.Context, extra map[string]interface{}) ([][]byte, error) {
-	return nil, fmt.Errorf("not implemented")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	uuids := make([][]byte, 0, len(s.obstacles))
+	for _, obstacle := range s.obstacles {
+		parsedId, err := uuid.FromBytes(obstacle.Uuid)
+		if err != nil {
+			s.logger.Errorw("Failed to parse UUID", "error", err.Error())
+			return nil, err
+		}
+
+		uuids = append(uuids, parsedId[:])
+	}
+
+	return uuids, nil
 }
 
 func (s *roombaWorldRoombaWorld) GetTransform(ctx context.Context, uuid []byte, extra map[string]interface{}) (*commonPB.Transform, error) {
@@ -141,9 +159,9 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 			PoseInObserverFrame: &commonPB.PoseInFrame{
 				ReferenceFrame: "world",
 				Pose: &commonPB.Pose{
-					X: x * 1000,
-					Y: y * 1000,
-					Z: z * 1000,
+					X:  x * 1000,
+					Y:  y * 1000,
+					Z:  z * 1000,
 					OZ: 1,
 				},
 			},
@@ -157,13 +175,13 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 			},
 			Uuid: uuid,
 		}
-		s.obstacles = append(s.obstacles, transform)
+		s.obstacles[string(uuid)] = transform
 		s.logger.Infof("draw_obstacle: added obstacle at (%.2f, %.2f, %.2f) m, total=%d", x, y, z, len(s.obstacles))
 		return map[string]interface{}{"status": "obstacle_added", "count": len(s.obstacles)}, nil
 
 	case "clear_obstacles":
 		count := len(s.obstacles)
-		s.obstacles = []*commonPB.Transform{}
+		s.obstacles = make(map[string]*commonPB.Transform)
 		s.logger.Infof("clear_obstacles: cleared %d obstacles", count)
 		return map[string]interface{}{"status": "obstacles_cleared", "count": count}, nil
 

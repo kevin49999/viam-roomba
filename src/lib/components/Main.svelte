@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { DEFAULT_PART_ID } from '$lib/consts';
-	import type { DialConf } from '@viamrobotics/sdk';
-	import { CameraStream, ViamProvider } from '@viamrobotics/svelte-sdk';
+	import { type DialConf } from '@viamrobotics/sdk';
+	import { ViamProvider } from '@viamrobotics/svelte-sdk';
 	import { getCookie } from 'typescript-cookie';
 	import AllReadings from './AllReadings.svelte';
 	import BaseCommands from './BaseCommands.svelte';
@@ -9,8 +9,6 @@
 	import BatteryPercent from './BatteryPercent.svelte';
 	import BrainCommands from './BrainCommands.svelte';
 	import BrainProvider from './BrainProvider.svelte';
-	import Camera from './Camera.svelte';
-	import CameraProvider from './CameraProvider.svelte';
 	import Joystick from './Joystick.svelte';
 	import OIMode from './OIMode.svelte';
 	import AutomaticMode from './AutomaticMode.svelte';
@@ -18,11 +16,11 @@
 	import RoombaVisualizer from './RoombaVisualizer.svelte';
 	import UltraSonic from './UltraSonic.svelte';
 	import MidiKeyboard from './MidiKeyboard.svelte';
+	import CameraFeed from './CameraFeed.svelte';
 
-	let { host, credentials, machineId } = $props<{
+	let { host, credentials } = $props<{
 		host: string;
 		credentials: any;
-		machineId?: string | null;
 	}>();
 
 	const dialConfigs: Record<string, DialConf> = $derived({
@@ -47,7 +45,6 @@
 	<ReadingsProvider partID={DEFAULT_PART_ID} name="sensor">
 		<BrainProvider partID={DEFAULT_PART_ID} name="roomba-brain">
 			<BaseProvider partID={DEFAULT_PART_ID} name="base">
-				<CameraProvider partID={DEFAULT_PART_ID} name="camera-1">
 					<div class="flex flex-col gap-6">
 						<div class="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900/50">
 							<h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 mb-4">Brain Commands</h2>
@@ -98,8 +95,7 @@
 							</div>
 
 							<div class="lg:col-span-1">
-								<!-- TODO: replace with actual stream using robot stream -->
-								<Camera/>
+								<CameraFeed name="camera-1" partID={DEFAULT_PART_ID} />
 							</div>
 						</div>
 
@@ -111,7 +107,6 @@
 							<MidiKeyboard />
 						</div>
 					</div>
-				</CameraProvider>
 			</BaseProvider>
 		</BrainProvider>
 	</ReadingsProvider>

@@ -344,24 +344,24 @@ func (s *brainBrain) choose_direction() float64 {
 func (s *brainBrain) add_obstacle_position(distance_in_front_of_roomba_mm float64) {
 	obstacle_x := s.pos_x_mm + distance_in_front_of_roomba_mm*math.Cos(s.bearing_deg*math.Pi/180.0)
 	obstacle_y := s.pos_y_mm + distance_in_front_of_roomba_mm*math.Sin(s.bearing_deg*math.Pi/180.0)
-	s.logger.Infof("add_obstacle_position: obstacle_x=%f mm, obstacle_y=%f mm", obstacle_x, obstacle_y)
-	s.obstaclePositions = append(s.obstaclePositions, ObstaclePosition{x_mm: obstacle_x, y_mm: obstacle_y})
-}
 
-func (s *brainBrain) report_last_obstacle_to_world_service(ctx context.Context) {
-	if s.worldService == nil || len(s.obstaclePositions) == 0 {
-		return
+	label := fmt.Sprintf("obstacle-%d", len(s.obstaclePositions))
+	s.logger.Infof("add_obstacle_position: obstacle_x=%f mm, obstacle_y=%f mm label=%s", obstacle_x, obstacle_y, label)
+	if s.worldService != nil {
+		result, err := s.worldService.DoCommand(context.Background(), map[string]any{
+			"command": "draw_obstacle",
+			"label":   label,
+			"x":       obstacle_x / 1000.0,
+			"y":       obstacle_y / 1000.0,
+			"z":       0.0,
+		})
+		if err != nil {
+			s.logger.Warnf("add_obstacle_position: failed: %v", err)
+		}
+		s.logger.Infof("add_obstacle_position: command result: %v", result)
+
 	}
-	last := s.obstaclePositions[len(s.obstaclePositions)-1]
-	_, err := s.worldService.DoCommand(ctx, map[string]any{
-		"command": "draw_obstacle",
-		"x":       last.x_mm / 1000.0,
-		"y":       last.y_mm / 1000.0,
-		"z":       0.0,
-	})
-	if err != nil {
-		s.logger.Warnf("report_last_obstacle_to_world_service: failed: %v", err)
-	}
+	s.obstaclePositions = append(s.obstaclePositions, ObstaclePosition{x_mm: obstacle_x, y_mm: obstacle_y})
 }
 
 // WARNING: very messy code below
@@ -372,15 +372,12 @@ func (s *brainBrain) start_automatic_mode() error {
 	s.pos_y_mm = 0
 	s.bearing_deg = 0
 	s.obstaclePositions = []ObstaclePosition{}
-	s.DoCommand(ctx, map[string]any{"command": "play_song"})
 	if s.worldService != nil {
 		if _, err := s.worldService.DoCommand(ctx, map[string]any{"command": "clear_obstacles"}); err != nil {
 			s.logger.Warnf("start_automatic_mode: failed to clear obstacles: %v", err)
 		}
 	}
 	s.logger.Info("start_automatic_mode: entered")
-	// TODO: the is_in_automatic_mode check should be in the loop but its being weird
-	// NOTE: TO EXIT AUTO MODE WE HAVE TO RESTART THE MODULE ( there was a weird bug where it would reconfigure and then automatic mode would stop)
 	for s.in_automatic_mode.Load() {
 		s.logger.Info("start_automatic_mode: loop iteration starting")
 		// move forward a bit
@@ -398,6 +395,12 @@ func (s *brainBrain) start_automatic_mode() error {
 		delta_y_mm := float64(distanceMm) * math.Sin(s.bearing_deg*math.Pi/180.0)
 		s.pos_x_mm += delta_x_mm
 		s.pos_y_mm += delta_y_mm
+		if s.worldService != nil {
+			_, err := s.worldService.DoCommand(ctx, map[string]any{"command": "update_roomba_position", "x": s.pos_x_mm / 1000.0, "y": s.pos_y_mm / 1000.0})
+			if err != nil {
+				s.logger.Warnf("start_automatic_mode: failed to update roomba position: %v", err)
+			}
+		}
 		// wait for distance/mmPerSec seconds
 		sleepDur := time.Duration(float64(distanceMm)/mmPerSec) * time.Second
 		s.logger.Infof("start_automatic_mode: sleeping %.2f s after move", sleepDur.Seconds())
@@ -423,7 +426,6 @@ func (s *brainBrain) start_automatic_mode() error {
 
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
 			s.add_obstacle_position(10)
-			s.report_last_obstacle_to_world_service(ctx)
 			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
 				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
 			// go backwards
@@ -459,7 +461,7 @@ func (s *brainBrain) start_automatic_mode() error {
 		}
 
 		s.logger.Info("start_automatic_mode: no obstacles, continuing loop")
-		timeoutContext, cancelTimeout := context.WithTimeout(ctx, 1000*time.Millisecond)
+		timeoutContext, cancelTimeout := context.WithTimeout(ctx, 3000*time.Millisecond)
 		defer cancelTimeout()
 		ultrasonic_readings, err := s.ultrasonicSensor.Readings(timeoutContext, nil)
 		if err == context.DeadlineExceeded {
@@ -475,9 +477,8 @@ func (s *brainBrain) start_automatic_mode() error {
 		s.logger.Info("start_automatic_mode: got ultrasonic sensor readings, checking obstacles")
 		ultrasonic_distance_m := ultrasonic_readings["distance"].(float64)
 		s.logger.Infof("start_automatic_mode: ultrasonic_distance=%f m", ultrasonic_distance_m)
-		if ultrasonic_distance_m < 0.75 {
+		if ultrasonic_distance_m < 1.0 {
 			s.add_obstacle_position(ultrasonic_distance_m * 1000.0)
-			s.report_last_obstacle_to_world_service(ctx)
 			s.logger.Infof("start_automatic_mode: ultrasonic_distance is too close, turning away")
 			// go backwards
 			distanceMm := -500

@@ -6,15 +6,40 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/uuid"
 	commonPB "go.viam.com/api/common/v1"
+	pb "go.viam.com/api/service/worldstatestore/v1"
 	"go.viam.com/rdk/logging"
 	"go.viam.com/rdk/resource"
 	worldstatestore "go.viam.com/rdk/services/worldstatestore"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 var (
 	RoombaWorld = resource.NewModel("dan", "viam-roomba", "world")
+)
+
+var (
+	roombaUUID  = "roomba-position"
+	boxMetadata = &structpb.Struct{
+		Fields: map[string]*structpb.Value{
+			"color": {
+				Kind: &structpb.Value_StructValue{
+					StructValue: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							"r": {Kind: &structpb.Value_NumberValue{NumberValue: 0}},
+							"g": {Kind: &structpb.Value_NumberValue{NumberValue: 255}},
+							"b": {Kind: &structpb.Value_NumberValue{NumberValue: 0}},
+						},
+					},
+				},
+			},
+			"opacity": {
+				Kind: &structpb.Value_NumberValue{
+					NumberValue: 0.5,
+				},
+			},
+		},
+	}
 )
 
 func init() {
@@ -26,20 +51,6 @@ func init() {
 }
 
 type WorldConfig struct {
-	/*
-		Put config attributes here. There should be public/exported fields
-		with a `json` parameter at the end of each attribute.
-
-		Example config struct:
-			type Config struct {
-				Pin   string `json:"pin"`
-				Board string `json:"board"`
-				MinDeg *float64 `json:"min_angle_deg,omitempty"`
-			}
-
-		If your model does not need a config, replace *Config in the init
-		function with resource.NoNativeConfig
-	*/
 }
 
 // Validate ensures all parts of the config are valid and important fields exist.
@@ -91,8 +102,33 @@ func NewRoombaWorld(ctx context.Context, deps resource.Dependencies, name resour
 		logger:     logger,
 		cfg:        conf,
 		obstacles:  make(map[string]*commonPB.Transform),
+		changeChan: make(chan worldstatestore.TransformChange, 100),
 		cancelCtx:  cancelCtx,
 		cancelFunc: cancelFunc,
+	}
+
+	// TEMP add dumby box
+	s.obstacles[roombaUUID] = &commonPB.Transform{
+		ReferenceFrame: "roomba-position",
+		PoseInObserverFrame: &commonPB.PoseInFrame{
+			ReferenceFrame: "world",
+			Pose: &commonPB.Pose{
+				X: 0, Y: 0, Z: 0, Theta: 0, OX: 0, OY: 0, OZ: 1,
+			},
+		},
+		PhysicalObject: &commonPB.Geometry{
+			GeometryType: &commonPB.Geometry_Box{
+				Box: &commonPB.RectangularPrism{
+					DimsMm: &commonPB.Vector3{
+						X: 500,
+						Y: 500,
+						Z: 100,
+					},
+				},
+			},
+		},
+		Uuid:     []byte(roombaUUID),
+		Metadata: boxMetadata,
 	}
 	return s, nil
 }
@@ -107,24 +143,30 @@ func (s *roombaWorldRoombaWorld) ListUUIDs(ctx context.Context, extra map[string
 
 	uuids := make([][]byte, 0, len(s.obstacles))
 	for _, obstacle := range s.obstacles {
-		parsedId, err := uuid.FromBytes(obstacle.Uuid)
-		if err != nil {
-			s.logger.Errorw("Failed to parse UUID", "error", err.Error())
-			return nil, err
-		}
-
-		uuids = append(uuids, parsedId[:])
+		uuids = append(uuids, obstacle.Uuid)
 	}
 
 	return uuids, nil
 }
 
 func (s *roombaWorldRoombaWorld) GetTransform(ctx context.Context, uuid []byte, extra map[string]interface{}) (*commonPB.Transform, error) {
-	return nil, fmt.Errorf("not implemented")
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	transform, exists := s.obstacles[string(uuid)]
+	if !exists {
+		return nil, fmt.Errorf("transform not found")
+	}
+
+	return transform, nil
 }
 
-func (s *roombaWorldRoombaWorld) StreamTransformChanges(ctx context.Context, extra map[string]interface{}) (*worldstatestore.TransformChangeStream, error) {
-	return nil, fmt.Errorf("not implemented")
+// StreamTransformChanges returns a channel of transform changes.
+func (s *roombaWorldRoombaWorld) StreamTransformChanges(
+	ctx context.Context,
+	extra map[string]any,
+) (*worldstatestore.TransformChangeStream, error) {
+	return worldstatestore.NewTransformChangeStreamFromChannel(ctx, s.changeChan), nil
 }
 
 func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
@@ -134,6 +176,33 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 	}
 
 	switch cmdName {
+	case "update_roomba_position":
+		s.mu.Lock()
+		x, ok := cmd["x"].(float64)
+		if !ok {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("x must be a number")
+		}
+		y, ok := cmd["y"].(float64)
+		if !ok {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("y must be a number")
+		}
+
+		roombaTransform := s.obstacles[roombaUUID]
+		roombaTransform.PoseInObserverFrame.Pose.X = x * 1000
+		roombaTransform.PoseInObserverFrame.Pose.Y = y * 1000
+		s.mu.Unlock()
+		s.emitTransformUpdate(&commonPB.Transform{
+			PoseInObserverFrame: &commonPB.PoseInFrame{
+				Pose: &commonPB.Pose{
+					X: x * 1000, Y: y * 1000, Z: 0, Theta: 0, OX: 0, OY: 0, OZ: 1,
+				},
+			},
+			Uuid: roombaTransform.Uuid,
+		}, []string{"poseInObserverFrame.pose.x", "poseInObserverFrame.pose.y"})
+
+		return map[string]interface{}{"status": "roomba_position_updated"}, nil
 	case "draw_obstacle":
 		x, ok := cmd["x"].(float64)
 		if !ok {
@@ -143,9 +212,9 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 		if !ok {
 			return nil, fmt.Errorf("y must be a number")
 		}
-		z, ok := cmd["z"].(float64)
+		label, ok := cmd["label"].(string)
 		if !ok {
-			return nil, fmt.Errorf("z must be a number")
+			return nil, fmt.Errorf("label must be a string")
 		}
 
 		uuid := make([]byte, 16)
@@ -155,13 +224,13 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 
 		// x, y, z are in meters; Pose uses millimeters
 		transform := &commonPB.Transform{
-			ReferenceFrame: "world",
+			ReferenceFrame: label,
 			PoseInObserverFrame: &commonPB.PoseInFrame{
 				ReferenceFrame: "world",
 				Pose: &commonPB.Pose{
 					X:  x * 1000,
 					Y:  y * 1000,
-					Z:  z * 1000,
+					Z:  0,
 					OZ: 1,
 				},
 			},
@@ -176,14 +245,22 @@ func (s *roombaWorldRoombaWorld) DoCommand(ctx context.Context, cmd map[string]i
 			Uuid: uuid,
 		}
 		s.obstacles[string(uuid)] = transform
-		s.logger.Infof("draw_obstacle: added obstacle at (%.2f, %.2f, %.2f) m, total=%d", x, y, z, len(s.obstacles))
+		s.logger.Infof("draw_obstacle: added obstacle at (%.2f, %.2f) m, total=%d", x, y, len(s.obstacles))
+		s.emitTransformChange(transform, pb.TransformChangeType_TRANSFORM_CHANGE_TYPE_ADDED, nil)
 		return map[string]interface{}{"status": "obstacle_added", "count": len(s.obstacles)}, nil
 
 	case "clear_obstacles":
-		count := len(s.obstacles)
-		s.obstacles = make(map[string]*commonPB.Transform)
-		s.logger.Infof("clear_obstacles: cleared %d obstacles", count)
-		return map[string]interface{}{"status": "obstacles_cleared", "count": count}, nil
+		s.mu.Lock()
+		clearedCount := 0
+		for obstacleUUID := range s.obstacles {
+			if obstacleUUID != roombaUUID {
+				delete(s.obstacles, obstacleUUID)
+				clearedCount++
+			}
+		}
+		s.logger.Infof("clear_obstacles: cleared %d obstacles", clearedCount)
+		s.mu.Unlock()
+		return map[string]interface{}{"status": "obstacles_cleared", "count": clearedCount}, nil
 
 	default:
 		return nil, fmt.Errorf("unknown command: %s", cmdName)
@@ -194,4 +271,36 @@ func (s *roombaWorldRoombaWorld) Close(context.Context) error {
 	// Put close code here
 	s.cancelFunc()
 	return nil
+}
+
+func (s *roombaWorldRoombaWorld) emitTransformChange(transform *commonPB.Transform, changeType pb.TransformChangeType, updatedFields []string) {
+	change := worldstatestore.TransformChange{
+		ChangeType:    changeType,
+		Transform:     transform,
+		UpdatedFields: updatedFields,
+	}
+
+	select {
+	case s.changeChan <- change:
+	case <-s.cancelCtx.Done():
+	default:
+		// Channel is full, skip this update
+	}
+}
+
+func (s *roombaWorldRoombaWorld) emitTransformUpdate(partial *commonPB.Transform, updatedFields []string) {
+	if partial == nil || len(partial.GetUuid()) == 0 {
+		return
+	}
+	change := worldstatestore.TransformChange{
+		ChangeType:    pb.TransformChangeType_TRANSFORM_CHANGE_TYPE_UPDATED,
+		Transform:     partial,
+		UpdatedFields: updatedFields,
+	}
+	select {
+	case s.changeChan <- change:
+	case <-s.cancelCtx.Done():
+	default:
+		// Channel is full, skip this update
+	}
 }

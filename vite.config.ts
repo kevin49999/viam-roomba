@@ -1,9 +1,11 @@
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
+import glsl from 'vite-plugin-glsl';
 
 export default defineConfig(({ mode }) => ({
-	plugins: [tailwindcss(), sveltekit()],
+	assetsInclude: ['**/*.hdr'],
+	plugins: [tailwindcss(), sveltekit(), glsl()],
 	define:
 		mode === 'ssr'
 			? {
@@ -11,7 +13,15 @@ export default defineConfig(({ mode }) => ({
 					window: 'globalThis'
 				}
 			: {},
+	optimizeDeps: {
+		esbuildOptions: {
+			loader: {
+				'.glsl': 'text',
+				'.hdr': 'file'
+			}
+		}
+	},
 	ssr: {
-		noExternal: ['@tanstack/svelte-query', '@viamrobotics/svelte-sdk']
+		noExternal: ['@tanstack/svelte-query', '@viamrobotics/svelte-sdk', '@viamrobotics/prime-core']
 	}
 }));

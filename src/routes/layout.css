@@ -1,3 +1,7 @@
 @import 'tailwindcss';
+
+@config '../../tailwind.config.ts';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@import '@viamrobotics/prime-core/prime.css';

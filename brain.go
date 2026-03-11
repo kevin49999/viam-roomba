@@ -364,6 +364,22 @@ func (s *brainBrain) add_obstacle_position(distance_in_front_of_roomba_mm float6
 	s.obstaclePositions = append(s.obstaclePositions, ObstaclePosition{x_mm: obstacle_x, y_mm: obstacle_y})
 }
 
+func (s *brainBrain) report_last_obstacle_to_world_service(ctx context.Context) {
+	if s.worldService == nil || len(s.obstaclePositions) == 0 {
+		return
+	}
+	last := s.obstaclePositions[len(s.obstaclePositions)-1]
+	_, err := s.worldService.DoCommand(ctx, map[string]any{
+		"command": "draw_obstacle",
+		"x":       last.x_mm / 1000.0,
+		"y":       last.y_mm / 1000.0,
+		"z":       0.0,
+	})
+	if err != nil {
+		s.logger.Warnf("report_last_obstacle_to_world_service: failed: %v", err)
+	}
+}
+
 // WARNING: very messy code below
 func (s *brainBrain) start_automatic_mode() error {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -426,6 +442,7 @@ func (s *brainBrain) start_automatic_mode() error {
 
 		if bump_right || bump_left || wall || cliff_left || cliff_front_left || cliff_front_right || cliff_right {
 			s.add_obstacle_position(10)
+			s.report_last_obstacle_to_world_service(ctx)
 			s.logger.Infof("start_automatic_mode: obstacles detected, turning away [bump_left=%v bump_right=%v wall=%v cliff_left=%v cliff_front_left=%v cliff_front_right=%v cliff_right=%v]",
 				bump_left, bump_right, wall, cliff_left, cliff_front_left, cliff_front_right, cliff_right)
 			// go backwards
@@ -479,6 +496,7 @@ func (s *brainBrain) start_automatic_mode() error {
 		s.logger.Infof("start_automatic_mode: ultrasonic_distance=%f m", ultrasonic_distance_m)
 		if ultrasonic_distance_m < 1.0 {
 			s.add_obstacle_position(ultrasonic_distance_m * 1000.0)
+			s.report_last_obstacle_to_world_service(ctx)
 			s.logger.Infof("start_automatic_mode: ultrasonic_distance is too close, turning away")
 			// go backwards
 			distanceMm := -500

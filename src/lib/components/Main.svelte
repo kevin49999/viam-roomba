@@ -17,7 +17,10 @@
 	import UltraSonic from './UltraSonic.svelte';
 	import MidiKeyboard from './MidiKeyboard.svelte';
 	import CameraFeed from './CameraFeed.svelte';
+<<<<<<< HEAD
 	import LazyLoaded from './LazyLoaded.svelte';
+=======
+>>>>>>> main
 
 	let { host, credentials } = $props<{
 		host: string;
@@ -97,9 +100,12 @@
 
 							<div class="lg:col-span-1">
 								<CameraFeed name="camera-1" partID={DEFAULT_PART_ID} />
+<<<<<<< HEAD
 							</div>
 							<div class="lg:col-span-6">
 								<LazyLoaded componentImportFunction={() => import('./RoombaWorld.svelte')} />
+=======
+>>>>>>> main
 							</div>
 						</div>
 

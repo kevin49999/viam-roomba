@@ -9,6 +9,7 @@ node_modules
 /build
 /dist
 /bin
+/reload-dist
 module.tar.gz
 
 # OS
